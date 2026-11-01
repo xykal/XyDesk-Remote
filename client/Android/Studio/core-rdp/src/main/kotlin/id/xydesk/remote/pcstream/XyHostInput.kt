@@ -308,7 +308,7 @@ object XyHostInputCodec {
         }.array()
     }
 
-    private inline fun variable(tag: Int, value: String): ByteArray {
+    private fun variable(tag: Int, value: String): ByteArray {
         val bytes = value.toByteArray(Charsets.UTF_8)
         return ByteArray(1 + bytes.size).also {
             it[0] = tag.toByte()

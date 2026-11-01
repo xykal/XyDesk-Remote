@@ -10,7 +10,6 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import id.xydesk.remote.ui.components.XyEmptyState
-import id.xydesk.remote.ui.ssh.XySshTerminalScreen
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -125,12 +124,9 @@ internal fun sectionTitle(section: XySection): String = xy(section.title, sectio
 private sealed interface XyRoute {
     data object Devices : XyRoute
     data object CreateRdp : XyRoute
-    data object SshTerminal : XyRoute
-    data class EditDevice(val profile: ConnectionProfile?, val pcQuickMode: Boolean = false) : XyRoute
+    data class EditDevice(val profile: ConnectionProfile?) : XyRoute
     data object Section : XyRoute
 
-    /** Feed Berita — layar sendiri, dipetakan ke tab nav [XyTab.FEED]. */
-    data object Feed : XyRoute
 
     /** Dashboard pengaturan — dipetakan ke tab nav [XyTab.PROFILE]. */
     data object Profile : XyRoute
@@ -188,7 +184,6 @@ fun XyDeskHome(
     var showCrash by remember { mutableStateOf(false) }
     val bootTail = remember { ConnectionLog.tailFromFile(context.applicationContext, 20) }
     var showBoot by remember { mutableStateOf(false) }
-    var feedbackOpen by remember { mutableStateOf(false) }
     // Pembaruan app: cek maksimal 12 jam sekali; dialog muncul bila portal
     // melaporkan versi lebih baru yang belum dilewati user.
     var updateInfo by remember { mutableStateOf<AppUpdateInfo?>(null) }
@@ -247,20 +242,7 @@ fun XyDeskHome(
             incrementLocalUsageSessionCount(context)
             scope.launch { repo.touch(profile) }
             val opts = runCatching { RdpOptions.of(context, profile.id) }.getOrNull()
-            if (opts?.pcConnectMode == true &&
-                (profile.port == 4433 || profile.username.isNullOrBlank() || profile.username.equals("XyDesk", ignoreCase = true))
-            ) {
-                context.startActivity(
-                    PcStreamSessionActivity.intent(
-                        context = context,
-                        directHost = profile.host,
-                        directPort = 4433,
-                        directFps = opts.pcTargetFps.coerceIn(60, 120),
-                    ),
-                )
-            } else {
                 context.startActivity(XyDeskSessionActivity.connectIntent(context, profile))
-            }
         }
     }
 
@@ -381,113 +363,6 @@ fun XyDeskHome(
         }
     }
 
-    /**
-     * Kirim masukan ke tujuan yang dipilih pengguna.
-     *
-     * Tidak ada tujuan yang di-hardcode ke alamat tertentu: repo ini tidak
-     * menyimpan alamat dukungan, jadi pilihannya adalah pemilih aplikasi
-     * Android (bebas ke aplikasi mana pun) atau salin draf ke clipboard
-     * supaya pengguna menempelkannya sendiri.
-     */
-    fun sendFeedback(destination: FeedbackDestination, category: String, message: String) {
-        feedbackOpen = false
-        // Salinan masukan selalu disimpan di database lokal HP lebih dulu;
-        // tidak ada salinan permanen di server mana pun.
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-            runCatching {
-                // Chat global dihapus (2026-10-24): masukan kini cukup
-                // disimpan lokal sederhana di preferensi HP.
-                val appCtx = context.applicationContext
-                val prefs = appCtx.getSharedPreferences("xydesk.feedback_local", Context.MODE_PRIVATE)
-                val prev = prefs.getString("items", "").orEmpty()
-                val entry = "${System.currentTimeMillis()}|$category|${destination.name}|" +
-                    message.replace("|", "/").replace("\n", " ").take(500)
-                prefs.edit().putString("items", (prev + "\n" + entry).takeLast(20_000)).apply()
-            }
-        }
-        val draft = feedbackShareDraft(
-            when (category) {
-                "bug" -> xyNow("Masalah", "Bug")
-                "idea" -> xyNow("Saran fitur", "Feature idea")
-                else -> xyNow("Lainnya", "Other")
-            },
-            message,
-        )
-        when (destination) {
-            FeedbackDestination.SEND -> {
-                // Kirim ke server pengembang (worker -> email). Salinan lokal
-                // sudah disimpan di atas; kegagalan jaringan tidak menghilangkan
-                // masukan pengguna.
-                val appCtx = context.applicationContext
-                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-                    val ok = runCatching {
-                        val api = CommunityJokesApi(appCtx)
-                        val payload = org.json.JSONObject()
-                            .put("client_id", api.rawClientId())
-                            .put("type", category)
-                            .put("text", message.take(2000))
-                            .put("name", api.displayName() ?: getVerifiedGitHubLogin(appCtx) ?: "Pengguna XyDesk")
-                            .toString()
-                        val conn = (java.net.URL("https://api.xydeskremote.biz.id/api/feedback").openConnection() as java.net.HttpURLConnection).apply {
-                            requestMethod = "POST"
-                            connectTimeout = 10_000
-                            readTimeout = 10_000
-                            doOutput = true
-                            setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                        }
-                        conn.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
-                        conn.responseCode in 200..299
-                    }.getOrDefault(false)
-                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                        notice.show(
-                            if (ok) xyNow("Masukan terkirim. Terima kasih!", "Feedback sent. Thank you!")
-                            else xyNow("Gagal mengirim. Salinan tersimpan di HP ini.", "Could not send. A copy is saved on this phone."),
-                        )
-                    }
-                }
-            }
-
-            FeedbackDestination.COPY -> {
-                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                if (clipboard == null) {
-                    notice.show(xyNow("Clipboard tidak tersedia", "Clipboard is unavailable"))
-                    return
-                }
-                runCatching {
-                    clipboard.setPrimaryClip(
-                        ClipData.newPlainText("XyDesk Remote feedback", draft),
-                    )
-                }.onSuccess {
-                    notice.show(
-                        xyNow(
-                            "Draf disalin. Tempel ke aplikasi mana pun.",
-                            "Draft copied. Paste it into any app.",
-                        ),
-                    )
-                }.onFailure {
-                    notice.show(xyNow("Gagal menyalin draf", "Could not copy the draft"))
-                }
-            }
-
-            FeedbackDestination.SHARE -> {
-                val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_SUBJECT, "XyDesk Remote feedback")
-                    putExtra(Intent.EXTRA_TEXT, draft)
-                }
-                runCatching {
-                    context.startActivity(
-                        Intent.createChooser(
-                            sendIntent,
-                            xyNow("Pilih aplikasi untuk berbagi", "Choose an app to share"),
-                        ),
-                    )
-                }.onFailure {
-                    notice.show(xyNow("Menu berbagi tidak tersedia", "Share menu is unavailable"))
-                }
-            }
-        }
-    }
 
     BackHandler {
         when {
@@ -496,7 +371,6 @@ fun XyDeskHome(
             updateModalOpen -> updateModalOpen = false
             confirmDeleteDevice != null -> confirmDeleteDevice = null
             confirmExitApp -> confirmExitApp = false
-            feedbackOpen -> feedbackOpen = false
             drawerOpen -> drawerOpen = false
             route != XyRoute.Devices || section != XySection.PERANGKAT -> {
                 route = XyRoute.Devices
@@ -532,15 +406,12 @@ fun XyDeskHome(
                     onConnect = { connect(it) },
                 )
 
-                XyRoute.SshTerminal -> XySshTerminalScreen(
-                    onBack = { route = XyRoute.Devices },
-                )
+
 
                 is XyRoute.EditDevice -> AddDeviceScreen(
                     existing = current.profile,
                     savedUsers = favorites.mapNotNull { it.username }.distinct(),
                     savedProfiles = favorites,
-                    initialPcQuickMode = current.pcQuickMode,
                     onCancel = { route = XyRoute.Devices },
                     onSubmit = { profile, remember, startNow -> submit(profile, remember, startNow) },
                 )
@@ -553,17 +424,9 @@ fun XyDeskHome(
                         sharedFileNotice = sharedFileNotice,
                         onDismissSharedNotice = onDismissSharedNotice,
                         onMenu = { drawerOpen = true },
-                        onAddRdp = { route = XyRoute.EditDevice(null, pcQuickMode = false) },
-                        onAddPcQuick = { route = XyRoute.EditDevice(null, pcQuickMode = true) },
-                        onOpenPcStream = { context.startActivity(PcStreamSessionActivity.intent(context)) },
+                        onAddRdp = { route = XyRoute.EditDevice(null) },
                         onCreateRdp = { route = XyRoute.CreateRdp },
-                        onOpenSshTerminal = { route = XyRoute.SshTerminal },
-                        onEdit = {
-                            route = XyRoute.EditDevice(
-                                it,
-                                pcQuickMode = RdpOptions.of(context, it.id).pcConnectMode,
-                            )
-                        },
+                        onEdit = { route = XyRoute.EditDevice(it) },
                         onConnect = { connect(it) },
                         onWakeConnect = { wakeAndConnect(it) },
                         onDelete = { profile -> confirmDeleteDevice = profile },
@@ -577,10 +440,7 @@ fun XyDeskHome(
                         onMenu = { drawerOpen = true },
                         appPrefs = appPrefs,
                         onEditDevice = {
-                            route = XyRoute.EditDevice(
-                                it,
-                                pcQuickMode = RdpOptions.of(context, it.id).pcConnectMode,
-                            )
+                            route = XyRoute.EditDevice(it)
                         },
                         onClearAllCredentials = {
                             scope.launch {
@@ -597,9 +457,6 @@ fun XyDeskHome(
                     )
                 }
 
-                XyRoute.Feed -> XyFeedScreen(
-                    onMenu = { drawerOpen = true },
-                )
                 XyRoute.Profile -> XyProfileScreen(
                     onMenu = { drawerOpen = true },
                     onOpenSection = {
@@ -609,7 +466,6 @@ fun XyDeskHome(
                     appPrefs = appPrefs,
                     deviceCount = favorites.size,
                     onShowLog = { showBoot = true },
-                    onOpenFeedback = { feedbackOpen = true },
                 )
 
                 XyRoute.Section -> Unit
@@ -619,7 +475,7 @@ fun XyDeskHome(
 
                 // Nav bawah disembunyikan saat form tambah/ubah perangkat, Chat Global,
                 // atau Terminal SSH terbuka supaya layar itu tetap penuh dan composer tidak tertutup.
-                if (route !is XyRoute.EditDevice && route != XyRoute.SshTerminal) {
+                if (route !is XyRoute.EditDevice) {
                     // Dock melayang (macOS/iOS style): tanpa garis pemisah lagi —
                     // kapsulnya sudah dipisahkan bayangan dari konten.
                     XyBottomNav(
@@ -631,7 +487,6 @@ fun XyDeskHome(
                                     section = XySection.PERANGKAT
                                     route = XyRoute.Devices
                                 }
-                                XyTab.FEED -> route = XyRoute.Feed
                                 XyTab.PROFILE -> route = XyRoute.Profile
                             }
                         },
@@ -643,13 +498,6 @@ fun XyDeskHome(
     // Modal OAuth GitHub Langsung Tanpa Kode (tersedia global untuk Beranda, Buat RDP, Profil, & Chat Global)
     GitHubDirectOAuthModalHost()
 
-    // In-App Notification Banner (Pengumuman, Balasan, Like, Reaksi, Mention, Chat, & OTA Data)
-    XyInAppNotificationBannerHost(
-        onOpenFeed = {
-            tab = XyTab.FEED
-            route = XyRoute.Feed
-        },
-    )
 
     // ---- Menu utama: 2 gaya — popup tengah atau sidebar kanan ----
     val homeMenuStyle = XyMenuStyleState.current(appPrefs)
@@ -684,10 +532,7 @@ fun XyDeskHome(
                     updateStatusText = status
                 }
             },
-            onFeedback = {
-                drawerOpen = false
-                feedbackOpen = true
-            },
+            onFeedback = {},
             version = "v${appVersion(context)}",
         )
     }
@@ -713,12 +558,6 @@ fun XyDeskHome(
             title = xy("Log XyDesk", "XyDesk Log"),
             body = body,
             onDismiss = { showBoot = false },
-        )
-    }
-    if (feedbackOpen) {
-        FeedbackDialog(
-            onDismiss = { feedbackOpen = false },
-            onSend = ::sendFeedback,
         )
     }
     confirmDeleteDevice?.let { target ->
@@ -1103,8 +942,6 @@ fun XyDeskHome(
 @Composable
 private fun HomeRdpFreeBannerCard(
     onCreateRdp: () -> Unit,
-    onOpenPcStream: () -> Unit,
-    onOpenSshTerminal: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -1171,20 +1008,6 @@ private fun HomeRdpFreeBannerCard(
                 icon = XyIcons.Monitor,
                 compact = true,
                 modifier = Modifier.weight(1.1f),
-            )
-            XyPillButton(
-                text = xy("PC Stream", "PC Stream"),
-                onClick = onOpenPcStream,
-                primary = false,
-                compact = true,
-                modifier = Modifier.weight(0.95f),
-            )
-            XyPillButton(
-                text = xy("SSH", "SSH"),
-                onClick = onOpenSshTerminal,
-                primary = false,
-                compact = true,
-                modifier = Modifier.weight(0.85f),
             )
         }
     }
@@ -1536,10 +1359,7 @@ private fun DevicesScreen(
     onDismissSharedNotice: () -> Unit,
     onMenu: () -> Unit,
     onAddRdp: () -> Unit,
-    onAddPcQuick: () -> Unit,
-    onOpenPcStream: () -> Unit,
     onCreateRdp: () -> Unit,
-    onOpenSshTerminal: () -> Unit,
     onEdit: (ConnectionProfile) -> Unit,
     onConnect: (ConnectionProfile) -> Unit,
     onWakeConnect: (ConnectionProfile) -> Unit,
@@ -1664,31 +1484,21 @@ private fun DevicesScreen(
                     ) {
                         HomeRdpFreeBannerCard(
                             onCreateRdp = onCreateRdp,
-                            onOpenPcStream = onOpenPcStream,
-                            onOpenSshTerminal = onOpenSshTerminal,
                         )
                         XyEmptyState(
                             title = xy("Belum Ada Perangkat Tersimpan", "No Saved Devices Yet"),
                             subtitle = xy(
-                                "Tambahkan Koneksi PC, PC Stream, atau RDP untuk mulai mengakses desktop jarak jauh.",
-                                "Add a PC, PC Stream, or RDP connection to start accessing your remote desktop.",
+                                "Tambahkan koneksi RDP untuk mulai mengakses desktop jarak jauh.",
+                                "Add an RDP connection to start accessing your remote desktop.",
                             ),
                             icon = XyIcons.Monitor,
                         )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            XyPillButton(
-                                xy("Koneksi PC (ID)", "PC (ID & Pass)"),
-                                onAddPcQuick,
-                                icon = XyIcons.Plus,
-                                modifier = Modifier.weight(1f),
-                            )
-                            XyPillButton(
-                                xy("Koneksi RDP", "Standard RDP"),
-                                onAddRdp,
-                                primary = false,
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
+                        XyPillButton(
+                            xy("Koneksi RDP", "Standard RDP"),
+                            onAddRdp,
+                            icon = XyIcons.Plus,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
                     }
                 }
             } else {
@@ -1718,8 +1528,6 @@ private fun DevicesScreen(
                     item {
                         HomeRdpFreeBannerCard(
                             onCreateRdp = onCreateRdp,
-                            onOpenPcStream = onOpenPcStream,
-                            onOpenSshTerminal = onOpenSshTerminal,
                         )
                     }
                     item {
@@ -1826,60 +1634,13 @@ private fun DevicesScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                 )
-                XyRow(
-                    title = xy("Koneksi PC (ID & Password)", "PC Connection (ID & Password)"),
-                    modifier = Modifier.padding(horizontal = 2.dp),
-                    trailing = {
-                        Text(
-                            xy("Eksperimental", "Experimental"),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            maxLines = 1,
-                        )
-                    },
-                    onClick = {
-                        showAddBubble = false
-                        onAddPcQuick()
-                    },
-                )
-                XyRow(
-                    title = xy("PC Stream & Engine Konsol Non-RDP (120Hz)", "PC Stream & Non-RDP Console Engine (120Hz)"),
-                    modifier = Modifier.padding(horizontal = 2.dp),
-                    trailing = {
-                        Text(
-                            xy("120Hz", "120Hz"),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            maxLines = 1,
-                        )
-                    },
-                    onClick = {
-                        showAddBubble = false
-                        onOpenPcStream()
-                    },
-                )
+
                 XyRow(
                     title = xy("Koneksi RDP (Host / IP)", "RDP Connection (Host / IP)"),
                     modifier = Modifier.padding(horizontal = 2.dp),
                     onClick = {
                         showAddBubble = false
                         onAddRdp()
-                    },
-                )
-                XyRow(
-                    title = xy("Terminal SSH / Linux VPS", "SSH Terminal / Linux VPS"),
-                    modifier = Modifier.padding(horizontal = 2.dp),
-                    trailing = {
-                        Text(
-                            "SSH-2",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            maxLines = 1,
-                        )
-                    },
-                    onClick = {
-                        showAddBubble = false
-                        onOpenSshTerminal()
                     },
                 )
                 XyRow(

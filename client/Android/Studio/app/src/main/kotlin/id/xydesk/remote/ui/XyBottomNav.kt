@@ -51,7 +51,6 @@ import id.xydesk.remote.ui.components.xyGlass
  */
 internal enum class XyTab(val title: String, val titleEn: String) {
     HOME("Beranda", "Home"),
-    FEED("Berita", "News"),
     PROFILE("Profil", "Profile"),
 }
 
@@ -99,7 +98,7 @@ internal fun XyBottomNav(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            listOf(XyTab.HOME, XyTab.FEED, XyTab.PROFILE).forEach { tab ->
+            listOf(XyTab.HOME, XyTab.PROFILE).forEach { tab ->
                 val active = tab == selected
                 val title = xy(tab.title, tab.titleEn)
                 val pillColor by animateColorAsState(
@@ -185,6 +184,5 @@ internal fun XyBottomNav(
 /** Ikon per tujuan. Ikon unik untuk setiap tujuan. */
 private fun tabIcon(tab: XyTab): ImageVector = when (tab) {
     XyTab.HOME -> XyIcons.Monitor
-    XyTab.FEED -> XyIcons.Globe
     XyTab.PROFILE -> XyIcons.Gear
 }

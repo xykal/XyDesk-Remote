@@ -758,7 +758,6 @@ private fun SecuritySection(appPrefs: AppPrefs) {
     var requireDeviceLock by remember { mutableStateOf(appPrefs.requireDeviceLock) }
     var autoLockRemoteOnLeave by remember { mutableStateOf(appPrefs.autoLockRemoteOnLeave) }
     var clearClipboardOnDisconnect by remember { mutableStateOf(appPrefs.clearClipboardOnDisconnect) }
-    var shareActiveSessionStats by remember { mutableStateOf(appPrefs.shareActiveSessionStats) }
     var defaultSecurityProtocol by remember {
         mutableStateOf(
             XySecurityProtocol.entries.getOrElse(appPrefs.defaultSecurityProtocol) { XySecurityProtocol.AUTO }
@@ -808,27 +807,6 @@ private fun SecuritySection(appPrefs: AppPrefs) {
                     clearClipboardOnDisconnect = it
                     appPrefs.clearClipboardOnDisconnect = it
                 },
-            )
-        }
-
-        XySectionLabel(xy("Status sesi aktif", "Active session status"))
-        XyCard {
-            XyToggleRow(
-                title = xy("Hitung sesi aktif secara anonim", "Count active sessions anonymously"),
-                checked = shareActiveSessionStats,
-                onCheckedChange = {
-                    shareActiveSessionStats = it
-                    appPrefs.shareActiveSessionStats = it
-                },
-            )
-            Text(
-                xy(
-                    "Yang dikirim hanya ID sesi acak sementara (berbeda untuk tiap koneksi)—bukan alamat PC, profil, username, password, clipboard, atau gambar desktop. Cloudflare tetap memproses metadata jaringan seperti IP. Angka publik adalah perkiraan sesi klien yang mengirim heartbeat, bukan jumlah orang; lease kedaluwarsa setelah 90 detik. Sakelar ini dapat dimatikan kapan saja.",
-                    "Only a temporary random session ID (new for each connection) is sent—not the PC address, profile, username, password, clipboard, or desktop image. Cloudflare still processes network metadata such as IP. The public figure estimates client sessions sending heartbeats, not people; leases expire after 90 seconds. Turn this switch off any time.",
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp),
             )
         }
 

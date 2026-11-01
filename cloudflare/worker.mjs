@@ -648,39 +648,6 @@ function durableObjectJson(data, status = 200, requestMethod = "GET") {
   });
 }
 
-async function hashedSessionKey(sessionId) {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(sessionId));
-  const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-  return `${ACTIVE_SESSION_PREFIX}${hex}`;
-}
-
-async function hashedCommunityClientId(clientId) {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(clientId));
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-function sanitizeCommunityDisplayName(value) {
-  if (typeof value !== "string") return null;
-  const clean = value.replace(/[\u0000-\u001F\u007F]/g, "").replace(/\s+/g, " ").trim();
-  const chars = [...clean];
-  if (chars.length < 1 || chars.length > COMMUNITY_DISPLAY_NAME_MAX_CHARS) return null;
-  if (/(?:https?:\/\/|www\.)/i.test(clean)) return null;
-  return chars.join("");
-}
-
-function decodeBase64Limited(value, maxBytes) {
-  if (typeof value !== "string" || value.length === 0) return null;
-  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(value) || Math.floor(value.length * 0.75) > maxBytes) return null;
-  try {
-    const binary = atob(value);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    return bytes.length > maxBytes ? null : bytes;
-  } catch {
-    return null;
-  }
-}
-
 async function readRequestTextLimited(request, maxBytes) {
   if (!request.body) return { text: "" };
   const reader = request.body.getReader();
@@ -715,28 +682,6 @@ async function readRequestTextLimited(request, maxBytes) {
   }
 }
 
-async function readCommunityJson(request, maxBytes = 2_048) {
-  if (!isJsonContentType(request.headers.get("content-type"))) {
-    return { error: durableObjectJson({ status: "invalid_content_type" }, 415, request.method) };
-  }
-  const contentLength = Number(request.headers.get("content-length") || 0);
-  if (contentLength > maxBytes) {
-    return { error: durableObjectJson({ status: "payload_too_large" }, 413, request.method) };
-  }
-  const bounded = await readRequestTextLimited(request, maxBytes);
-  if (bounded.tooLarge) {
-    return { error: durableObjectJson({ status: "payload_too_large" }, 413, request.method) };
-  }
-  if (bounded.invalid) {
-    return { error: durableObjectJson({ status: "invalid_request" }, 400, request.method) };
-  }
-  try {
-    return { body: JSON.parse(bounded.text) };
-  } catch {
-    return { error: durableObjectJson({ status: "invalid_json" }, 400, request.method) };
-  }
-}
-
 function randomBase64Url(byteLength) {
   const bytes = crypto.getRandomValues(new Uint8Array(byteLength));
   let binary = "";
@@ -748,248 +693,6 @@ async function pcSignalSecretHash(secret) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret));
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
-export class ActiveSessions {
-  constructor(state) {
-    this.state = state;
-  }
-
-  async fetch(request) {
-    const path = new URL(request.url).pathname;
-    if (path === "/count" && request.method === "GET") return this.readCount();
-    if (path === "/update" && request.method === "POST") return this.updateLease(request);
-    return durableObjectJson({ status: "not_found" }, 404);
-  }
-
-  async readCount() {
-    try {
-      const countValue = await this.state.storage.get("meta:active-count");
-      const active = Math.max(0, Math.min(ACTIVE_SESSION_MAX, Number(countValue) || 0));
-      await this.ensureCleanupAlarm(active);
-      return durableObjectJson({ status: "ok", active_session_count: active });
-    } catch {
-      return durableObjectJson({ status: "unavailable" }, 503);
-    }
-  }
-
-  async updateLease(request) {
-    const contentType = request.headers.get("content-type") || "";
-    if (!isJsonContentType(contentType)) {
-      return durableObjectJson({ status: "invalid_content_type" }, 415);
-    }
-    const contentLength = Number(request.headers.get("content-length") || 0);
-    if (contentLength > 512) return durableObjectJson({ status: "payload_too_large" }, 413);
-
-    let raw;
-    try {
-      raw = await request.text();
-    } catch {
-      return durableObjectJson({ status: "invalid_request" }, 400);
-    }
-    if (raw.length > 512) return durableObjectJson({ status: "payload_too_large" }, 413);
-
-    let body;
-    try {
-      body = JSON.parse(raw);
-    } catch {
-      return durableObjectJson({ status: "invalid_json" }, 400);
-    }
-    const action = body?.action;
-    const sessionId = body?.session_id;
-    if (!ACTIVE_SESSION_ID_RE.test(String(sessionId || "")) || !["heartbeat", "end"].includes(action)) {
-      return durableObjectJson({ status: "invalid_session_report" }, 400);
-    }
-
-    try {
-      const key = await hashedSessionKey(sessionId);
-      const now = Date.now();
-      const result = await this.state.storage.transaction(async (transaction) => {
-        const lastSeen = await transaction.get(key);
-        let active = Math.max(0, Number(await transaction.get("meta:active-count")) || 0);
-
-        if (action === "end") {
-          if (lastSeen !== undefined) {
-            await transaction.delete(key);
-            active = Math.max(0, active - 1);
-            await transaction.put("meta:active-count", active);
-          }
-          return { active, full: false };
-        }
-
-        if (lastSeen === undefined && active >= ACTIVE_SESSION_MAX) {
-          // Only scan the lease set at capacity; ordinary heartbeats remain O(1).
-          const entries = await transaction.list({ prefix: ACTIVE_SESSION_PREFIX, limit: ACTIVE_SESSION_MAX + 1 });
-          active = 0;
-          for (const [entryKey, seenAt] of entries) {
-            const timestamp = Number(seenAt);
-            if (!Number.isFinite(timestamp) || now - timestamp > ACTIVE_SESSION_TTL_MS) {
-              await transaction.delete(entryKey);
-            } else {
-              active += 1;
-            }
-          }
-          await transaction.put("meta:active-count", active);
-          if (active >= ACTIVE_SESSION_MAX) return { active, full: true };
-        }
-
-        if (lastSeen === undefined) active += 1;
-        await transaction.put(key, now);
-        await transaction.put("meta:active-count", active);
-        return { active, full: false };
-      });
-      await this.ensureCleanupAlarm(result.active);
-      if (result.full) return durableObjectJson({ status: "capacity_reached" }, 429);
-      return durableObjectJson({ status: "ok", active_session_count: result.active });
-    } catch {
-      return durableObjectJson({ status: "unavailable" }, 503);
-    }
-  }
-
-  async ensureCleanupAlarm(activeCount) {
-    const existing = await this.state.storage.getAlarm();
-    if (activeCount > 0 && (existing === null || existing === undefined)) {
-      await this.state.storage.setAlarm(Date.now() + 10_000);
-    } else if (activeCount === 0 && existing !== null && existing !== undefined) {
-      await this.state.storage.deleteAlarm();
-    }
-  }
-
-  async alarm() {
-    const now = Date.now();
-    const active = await this.state.storage.transaction(async (transaction) => {
-      const entries = await transaction.list({ prefix: ACTIVE_SESSION_PREFIX, limit: ACTIVE_SESSION_MAX + 1 });
-      let count = 0;
-      for (const [key, lastSeen] of entries) {
-        const timestamp = Number(lastSeen);
-        if (!Number.isFinite(timestamp) || now - timestamp > ACTIVE_SESSION_TTL_MS) {
-          await transaction.delete(key);
-        } else {
-          count += 1;
-        }
-      }
-      count = Math.min(count, ACTIVE_SESSION_MAX);
-      await transaction.put("meta:active-count", count);
-      return count;
-    });
-    await this.ensureCleanupAlarm(active);
-  }
-}
-
-export class CommunityJokes {
-  constructor(state, env) {
-    this.state = state;
-    this.env = env;
-  }
-
-  get kv() {
-    return this.env?.UNIQUE_DOWNLOADS || null;
-  }
-
-  async fetch(request) {
-    const url = new URL(request.url);
-    const path = url.pathname;
-    if (path === "/me" && request.method === "GET") return this.me(request);
-    if (path === "/me" && request.method === "PUT") return this.setMe(request);
-    return durableObjectJson({ status: "not_found" }, 404, request.method);
-  }
-
-  async me(request) {
-    const clientId = request.headers.get("x-xydesk-client-id") || "";
-    if (!COMMUNITY_CLIENT_ID_RE.test(clientId)) {
-      return durableObjectJson({ status: "invalid_client_id" }, 400, request.method);
-    }
-    try {
-      const clientHash = await hashedCommunityClientId(clientId);
-      const displayName = await this.state.storage.get(`account-name:${clientHash}`) || null;
-      let avatarUrl = null;
-      if (this.kv) {
-        const head = await this.kv.getWithMetadata(`feed-avatar:${clientHash}`).catch(() => null);
-        if (head?.value !== null && head?.value !== undefined) avatarUrl = `/api/jokes/avatar/${clientHash}`;
-      }
-      return durableObjectJson({ status: "ok", display_name: displayName, avatar_url: avatarUrl }, 200, request.method);
-    } catch {
-      return durableObjectJson({ status: "unavailable" }, 503, request.method);
-    }
-  }
-
-  async setMe(request) {
-    const parsed = await readCommunityJson(request, 2_400_000);
-    if (parsed.error) return parsed.error;
-    const clientId = parsed.body?.client_id;
-    if (!COMMUNITY_CLIENT_ID_RE.test(String(clientId || ""))) {
-      return durableObjectJson({ status: "invalid_client_id" }, 400, request.method);
-    }
-    const displayName = sanitizeCommunityDisplayName(parsed.body?.display_name);
-    const wantsAvatar = parsed.body?.avatar !== undefined && parsed.body?.avatar !== null;
-    const avatarMime = COMMUNITY_ATTACHMENT_MIMES.includes(parsed.body?.avatar_mime)
-      ? parsed.body.avatar_mime : null;
-    const avatarBytes = wantsAvatar && parsed.body.avatar !== ""
-      ? decodeBase64Limited(String(parsed.body.avatar || ""), COMMUNITY_AVATAR_MAX_BYTES)
-      : null;
-    if (wantsAvatar && parsed.body.avatar !== "" && (!avatarMime || !avatarBytes)) {
-      return durableObjectJson({ status: "invalid_avatar" }, 400, request.method);
-    }
-    if (!displayName && !wantsAvatar) {
-      return durableObjectJson({ status: "invalid_display_name", max_chars: COMMUNITY_DISPLAY_NAME_MAX_CHARS }, 400, request.method);
-    }
-    try {
-      const clientHash = await hashedCommunityClientId(clientId);
-      if (displayName) await this.state.storage.put(`account-name:${clientHash}`, displayName);
-      if (wantsAvatar) {
-        if (parsed.body.avatar === "") {
-          if (this.kv) await this.kv.delete(`feed-avatar:${clientHash}`).catch(() => {});
-        } else if (this.kv) {
-          await this.kv.put(`feed-avatar:${clientHash}`, avatarBytes, { metadata: { mime: avatarMime } });
-        }
-      }
-      const savedName = displayName || await this.state.storage.get(`account-name:${clientHash}`) || null;
-      return durableObjectJson({
-        status: "ok", display_name: savedName,
-        avatar_url: wantsAvatar && parsed.body.avatar !== "" ? `/api/jokes/avatar/${clientHash}` : null,
-      }, 200, request.method);
-    } catch {
-      return durableObjectJson({ status: "unavailable" }, 503, request.method);
-    }
-  }
-
-}
-
-async function activeSessionsResponse(request, env) {
-  if (!env.ACTIVE_SESSIONS) {
-    return jsonResponse({ status: "unavailable", active_session_count: null }, 503, request.method);
-  }
-  // Angka ini GLOBAL (bukan per pengguna), jadi aman dibagikan lintas klien.
-  // Tanpa cache, tiap tab yang polling 60 detik memicu 1 request Worker +
-  // 1 request Durable Object. Dengan cache 15 detik di edge, ratusan tab
-  // dalam jendela yang sama dilayani oleh satu jawaban. Ini langsung
-  // mengurangi tekanan pada kuota harian Workers (Error 1027).
-  const cache = globalThis.caches?.default || null;
-  const cacheKey = request.method === "GET"
-    ? new Request(new URL("/api/active-sessions", request.url), { method: "GET" })
-    : null;
-  if (cache && cacheKey) {
-    const hit = await cache.match(cacheKey).catch(() => null);
-    if (hit) return hit;
-  }
-  try {
-    const id = env.ACTIVE_SESSIONS.idFromName("xydesk-remote-global");
-    const stub = env.ACTIVE_SESSIONS.get(id);
-    const response = await stub.fetch("https://active-sessions/count");
-    const data = await response.json();
-    const out = jsonResponse({
-      ...data,
-      scope: "client-reported-anonymous-rdp-sessions",
-      note: "Perkiraan sesi aplikasi yang mengirim heartbeat anonim (aktif secara default, dapat dimatikan di aplikasi); bukan jumlah pengguna unik atau semua koneksi RDP.",
-      checked_at: new Date().toISOString(),
-    }, response.status, request.method, { "cache-control": "public, max-age=15" });
-    if (cache && cacheKey && response.ok) {
-      await cache.put(cacheKey, out.clone()).catch(() => {});
-    }
-    return out;
-  } catch {
-    return jsonResponse({ status: "unavailable", active_session_count: null }, 503, request.method);
-  }
-}
-
 // Cloud sync setelan & kontrol kustom (permintaan pemilik sejak 2026-10,
 // dieksekusi 2026-10-13). Blob JSON disetel aplikasi; TIDAK boleh memuat
 // kredensial (kata sandi/token disaring di sisi app). Disimpan di KV dengan
@@ -1185,119 +888,6 @@ async function accountSettingsResponse(request, env) {
   return methodNotAllowed("GET, PUT, POST");
 }
 
-async function sessionReportResponse(request, env) {
-  if (!env.ACTIVE_SESSIONS) {
-    return jsonResponse({ status: "unavailable" }, 503, request.method);
-  }
-  const contentType = request.headers.get("content-type") || "";
-  if (!isJsonContentType(contentType)) {
-    return jsonResponse({ status: "invalid_content_type" }, 415, request.method);
-  }
-  const contentLength = Number(request.headers.get("content-length") || 0);
-  if (contentLength > 512) return jsonResponse({ status: "payload_too_large" }, 413, request.method);
-
-  let raw;
-  try {
-    raw = await request.text();
-  } catch {
-    return jsonResponse({ status: "invalid_request" }, 400, request.method);
-  }
-  if (raw.length > 512) return jsonResponse({ status: "payload_too_large" }, 413, request.method);
-
-  let body;
-  try {
-    body = JSON.parse(raw);
-  } catch {
-    return jsonResponse({ status: "invalid_json" }, 400, request.method);
-  }
-  if (!ACTIVE_SESSION_ID_RE.test(String(body?.session_id || "")) || !["heartbeat", "end"].includes(body?.action)) {
-    return jsonResponse({ status: "invalid_session_report" }, 400, request.method);
-  }
-
-  // Klien lama mengirim heartbeat tiap ±8 detik. Lease berlaku 90 detik,
-  // jadi heartbeat yang sama cukup diteruskan ke Durable Object maksimal
-  // 45 detik sekali; sisanya dijawab dari cache isolate terakhir.
-  if (body.action === "heartbeat") {
-    const forwarded = SESSION_HEARTBEAT_FORWARD.get(body.session_id);
-    if (forwarded && Date.now() - forwarded.at < SESSION_HEARTBEAT_COALESCE_MS) {
-      return jsonResponse(
-        { status: "ok", active_session_count: forwarded.count },
-        200,
-        request.method,
-        { "cache-control": "no-store" },
-      );
-    }
-  } else {
-    SESSION_HEARTBEAT_FORWARD.delete(body.session_id);
-  }
-
-  try {
-    const id = env.ACTIVE_SESSIONS.idFromName("xydesk-remote-global");
-    const stub = env.ACTIVE_SESSIONS.get(id);
-    const response = await stub.fetch("https://active-sessions/update", {
-      method: "POST",
-      headers: { "content-type": "application/json; charset=utf-8" },
-      body: JSON.stringify({ action: body.action, session_id: body.session_id }),
-    });
-    const data = await response.json();
-    if (response.ok && body.action === "heartbeat") {
-      SESSION_HEARTBEAT_FORWARD.set(body.session_id, {
-        at: Date.now(),
-        count: Math.max(0, Number(data?.active_session_count || 0)),
-      });
-      if (SESSION_HEARTBEAT_FORWARD.size > 5000) {
-        const oldest = SESSION_HEARTBEAT_FORWARD.keys().next().value;
-        if (oldest) SESSION_HEARTBEAT_FORWARD.delete(oldest);
-      }
-    }
-    return jsonResponse(data, response.status, request.method, { "cache-control": "no-store" });
-  } catch {
-    return jsonResponse({ status: "unavailable" }, 503, request.method);
-  }
-}
-
-async function serveCommunityBinary(request, env, url) {
-  if (request.method !== "GET" && request.method !== "HEAD") return methodNotAllowed("GET, HEAD");
-  const m = url.pathname.match(/^\/api\/jokes\/avatar\/([^/]+)$/i);
-  if (!m) return jsonResponse({ status: "not_found" }, 404, request.method);
-  const rawSlug = decodeURIComponent(m[1]).trim();
-  const kvKey = /^[0-9a-f]{64}$/i.test(rawSlug) ? `feed-avatar:${rawSlug.toLowerCase()}` : null;
-  if (kvKey && env.UNIQUE_DOWNLOADS) {
-    try {
-      const value = await env.UNIQUE_DOWNLOADS.getWithMetadata(kvKey, { type: "arrayBuffer" });
-      if (value && value.value !== null && value.value !== undefined) {
-        const mime = COMMUNITY_ATTACHMENT_MIMES.includes(value.metadata?.mime) ? value.metadata.mime : "application/octet-stream";
-        return new Response(request.method === "HEAD" ? null : value.value, {
-          status: 200,
-          headers: {
-            "content-type": mime,
-            "cache-control": "public, max-age=86400",
-            "access-control-allow-origin": "*",
-          },
-        });
-      }
-    } catch {
-      return jsonResponse({ status: "unavailable" }, 503, request.method);
-    }
-  }
-  {
-    const ghParam = String(url.searchParams.get("github") || "").trim().replace(/^@+/, "");
-    const candidateGh = ghParam || (/^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/.test(rawSlug) && !/^[0-9a-f]{12,}$/i.test(rawSlug) ? rawSlug : "");
-    if (candidateGh) {
-      return new Response(null, {
-        status: 302,
-        headers: {
-          location: `https://avatars.githubusercontent.com/${encodeURIComponent(candidateGh)}?size=120`,
-          "cache-control": "public, max-age=1800",
-          "access-control-allow-origin": "*",
-        },
-      });
-    }
-  }
-  if (!env.UNIQUE_DOWNLOADS) return jsonResponse({ status: "unavailable" }, 503, request.method);
-  return jsonResponse({ status: "not_found" }, 404, request.method);
-}
-
 // Pemeriksaan pembaruan untuk app: tag rilis publik terbaru + ringkasan
 // changelog + dukungan sistem OTA "Download Data" untuk update ringan.
 async function updateCheckResponse(request, env) {
@@ -1402,14 +992,9 @@ async function dataPackResponse(request, env) {
 // pemakaian massal yang sah (banyak user di balik satu NAT), tapi memangkas
 // flood otomatis ribuan req/detik menjadi maks ratusan per menit per IP.
 const API_ABUSE_TIERS = [
-  ["/api/firebase/token", 15],
   ["/api/push-update", 5],
   ["/api/ui/translate", 30],
-  ["/api/chat/push-relay", 60],
-  ["/api/chat/translate", 60],
   ["/api/og", 60],
-  ["/api/chat/send", 300],
-  ["/ws/chat", 120],
 ];
 const API_ABUSE_DEFAULT_PER_MIN = 3000;
 const API_ABUSE_WINDOW_MS = 60_000;
@@ -1489,7 +1074,6 @@ async function uiTranslateResponse(request) {
 // setelah kirim berhasil; identitas pengirim WAJIB dari verifikasi
 // GitHub PAT (body tidak dipercaya), lalu push OneSignal disiarkan
 // dengan format data yang sama seperti pushChatNotification di DO.
-const pushRelaySeen = new Map();
 
 const FEEDBACK_TYPES = new Set(["bug", "idea", "question", "other"]);
 const FEEDBACK_STATUSES = new Set(["open", "progress", "done"]);
@@ -1500,364 +1084,6 @@ const FEEDBACK_MAX_ITEMS = 400;
 const FEEDBACK_MAX_REPLIES = 60;
 const FEEDBACK_SUBMIT_INTERVAL_MS = 30_000;
 const FEEDBACK_REPLY_INTERVAL_MS = 10_000;
-
-function sanitizeFeedbackText(value, maxChars) {
-  if (typeof value !== "string") return null;
-  const clean = value.replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim();
-  const chars = [...clean];
-  if (chars.length < 1 || chars.length > maxChars) return null;
-  return chars.join("");
-}
-
-function sanitizeFeedbackName(value) {
-  if (typeof value !== "string") return null;
-  const clean = value.replace(/[\u0000-\u001F\u007F]/g, "").replace(/\s+/g, " ").trim();
-  const chars = [...clean];
-  if (chars.length < 1 || chars.length > FEEDBACK_NAME_MAX_CHARS) return null;
-  return chars.join("");
-}
-
-function feedbackPublicView(entry, replies) {
-  return {
-    id: entry.id,
-    created_at: entry.created_at,
-    name: entry.name || null,
-    type: entry.type,
-    text: entry.text,
-    status: entry.status,
-    reply_count: replies.length,
-    last_activity: entry.last_activity || entry.created_at,
-    replies,
-  };
-}
-
-function feedbackReplyPublicView(reply) {
-  return {
-    id: reply.id,
-    name: reply.staff ? "XyDesk Team" : (reply.name || null),
-    text: reply.text,
-    staff: Boolean(reply.staff),
-    created_at: reply.created_at,
-  };
-}
-
-export class FeedbackBoard {
-  constructor(state, env) {
-    this.state = state;
-    this.env = env;
-  }
-
-  async notifyFeedbackEmail(entry) {
-    const apiKey = this.env["RESEND_" + "API_KEY"];
-    if (!apiKey) return;
-    const to = this.env.FEEDBACK_EMAIL_TO || "haekalsaputra01h@gmail.com";
-    const from = this.env.FEEDBACK_EMAIL_FROM || "XyDesk Feedback <onboarding@resend.dev>";
-    try {
-      await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-        body: JSON.stringify({
-          from,
-          to: [to],
-          subject: `[XyDesk Feedback] ${entry.type} - ${entry.name || "Pengguna"}`,
-          text: `Kategori: ${entry.type}\nDari: ${entry.name || "-"}\nWaktu: ${new Date(entry.created_at || Date.now()).toISOString()}\n\n${entry.text || ""}`,
-        }),
-      });
-    } catch {}
-  }
-
-  async fetch(request) {
-    const url = new URL(request.url);
-    const path = url.pathname;
-    const staff = request.headers.get("x-xydesk-verified-staff") === "1";
-    if (path === "/list" && (request.method === "GET" || request.method === "HEAD")) {
-      return this.list(request);
-    }
-    if (path === "/submit" && request.method === "POST") return this.submit(request);
-    const reply = path.match(/^\/reply\/([0-9a-f-]{36})$/i);
-    if (reply && request.method === "POST") return this.reply(request, reply[1], staff);
-    const status = path.match(/^\/status\/([0-9a-f-]{36})$/i);
-    if (status && request.method === "POST") return this.setStatus(request, status[1], staff);
-    const hide = path.match(/^\/hide\/([0-9a-f-]{36})$/i);
-    if (hide && request.method === "POST") return this.hide(request, hide[1], staff);
-    return durableObjectJson({ status: "not_found" }, 404, request.method);
-  }
-
-  async list(request) {
-    try {
-      const entries = await this.state.storage.list({ prefix: "fb:", limit: FEEDBACK_MAX_ITEMS, reverse: true });
-      const items = [];
-      for (const [key, entry] of entries) {
-        if (!entry || entry.hidden) continue;
-        const replyEntries = await this.state.storage.list({ prefix: `fb-reply:${entry.id}:`, limit: FEEDBACK_MAX_REPLIES });
-        const replies = Array.from(replyEntries.values())
-          .sort((a, b) => (a.created_at || 0) - (b.created_at || 0))
-          .map(feedbackReplyPublicView);
-        items.push(feedbackPublicView(entry, replies));
-        if (items.length >= 50) break;
-      }
-      return durableObjectJson({ status: "ok", items }, 200, request.method);
-    } catch {
-      return durableObjectJson({ status: "unavailable" }, 503, request.method);
-    }
-  }
-
-  async submit(request) {
-    const parsed = await readCommunityJson(request, 8_192);
-    if (parsed.error) return parsed.error;
-    const clientId = parsed.body?.client_id;
-    if (!COMMUNITY_CLIENT_ID_RE.test(String(clientId || ""))) {
-      return durableObjectJson({ status: "invalid_client_id" }, 400, request.method);
-    }
-    const type = String(parsed.body?.type || "");
-    if (!FEEDBACK_TYPES.has(type)) {
-      return durableObjectJson({ status: "invalid_type" }, 400, request.method);
-    }
-    const text = sanitizeFeedbackText(parsed.body?.text, FEEDBACK_TEXT_MAX_CHARS);
-    if (!text) {
-      return durableObjectJson({ status: "invalid_text", max_chars: FEEDBACK_TEXT_MAX_CHARS }, 400, request.method);
-    }
-    const name = sanitizeFeedbackName(parsed.body?.name);
-    try {
-      const clientHash = await hashedCommunityClientId(clientId);
-      const now = Date.now();
-      const outcome = await this.state.storage.transaction(async (transaction) => {
-        const rateKey = `fb-rate:${clientHash}`;
-        const lastAt = Number(await transaction.get(rateKey)) || 0;
-        if (now - lastAt < FEEDBACK_SUBMIT_INTERVAL_MS) {
-          return { status: "rate_limited", retry_after_seconds: Math.ceil((FEEDBACK_SUBMIT_INTERVAL_MS - (now - lastAt)) / 1_000) };
-        }
-        const id = crypto.randomUUID();
-        const entry = { id, created_at: now, last_activity: now, name, type, text, status: "open", hidden: false };
-        await transaction.put(`fb:${String(now).padStart(13, "0")}:${id}`, entry);
-        await transaction.put(`fb-id:${id}`, `fb:${String(now).padStart(13, "0")}:${id}`);
-        await transaction.put(rateKey, now);
-        // Batasi jumlah thread: buang yang paling tua beserta balasannya.
-        const all = await transaction.list({ prefix: "fb:", limit: FEEDBACK_MAX_ITEMS + 50 });
-        const keys = Array.from(all.keys()).sort();
-        if (keys.length > FEEDBACK_MAX_ITEMS) {
-          for (const oldKey of keys.slice(0, keys.length - FEEDBACK_MAX_ITEMS)) {
-            const old = all.get(oldKey);
-            await transaction.delete(oldKey);
-            if (old?.id) {
-              await transaction.delete(`fb-id:${old.id}`);
-              const replies = await transaction.list({ prefix: `fb-reply:${old.id}:`, limit: 1_000 });
-              for (const k of replies.keys()) await transaction.delete(k);
-            }
-          }
-        }
-        return { status: "created", item: feedbackPublicView(entry, []) };
-      });
-      if (outcome.status === "rate_limited") return durableObjectJson(outcome, 429, request.method);
-      if (outcome.status === "created" && outcome.item) {
-        try { this.state.waitUntil(this.notifyFeedbackEmail(outcome.item)); } catch {}
-      }
-      return durableObjectJson(outcome, 201, request.method);
-    } catch {
-      return durableObjectJson({ status: "unavailable" }, 503, request.method);
-    }
-  }
-
-  async reply(request, feedbackId, staff) {
-    if (!ACTIVE_SESSION_ID_RE.test(feedbackId)) {
-      return durableObjectJson({ status: "invalid_feedback_id" }, 400, request.method);
-    }
-    const parsed = await readCommunityJson(request, 4_096);
-    if (parsed.error) return parsed.error;
-    const clientId = parsed.body?.client_id;
-    if (!COMMUNITY_CLIENT_ID_RE.test(String(clientId || ""))) {
-      return durableObjectJson({ status: "invalid_client_id" }, 400, request.method);
-    }
-    const text = sanitizeFeedbackText(parsed.body?.text, FEEDBACK_REPLY_MAX_CHARS);
-    if (!text) {
-      return durableObjectJson({ status: "invalid_text", max_chars: FEEDBACK_REPLY_MAX_CHARS }, 400, request.method);
-    }
-    const name = sanitizeFeedbackName(parsed.body?.name);
-    try {
-      const clientHash = await hashedCommunityClientId(clientId);
-      const now = Date.now();
-      const outcome = await this.state.storage.transaction(async (transaction) => {
-        const rateKey = `fb-reply-rate:${clientHash}`;
-        const lastAt = Number(await transaction.get(rateKey)) || 0;
-        if (!staff && now - lastAt < FEEDBACK_REPLY_INTERVAL_MS) {
-          return { status: "rate_limited", retry_after_seconds: Math.ceil((FEEDBACK_REPLY_INTERVAL_MS - (now - lastAt)) / 1_000) };
-        }
-        const key = await transaction.get(`fb-id:${feedbackId}`);
-        if (!key) return { status: "not_found" };
-        const entry = await transaction.get(key);
-        if (!entry || entry.hidden) return { status: "not_found" };
-        const id = crypto.randomUUID();
-        const reply = { id, feedback_id: feedbackId, name, text, staff, created_at: now };
-        await transaction.put(`fb-reply:${feedbackId}:${String(now).padStart(13, "0")}:${id}`, reply);
-        await transaction.put(rateKey, now);
-        entry.last_activity = now;
-        await transaction.put(key, entry);
-        return { status: "created", reply: feedbackReplyPublicView(reply) };
-      });
-      if (outcome.status === "not_found") return durableObjectJson(outcome, 404, request.method);
-      if (outcome.status === "rate_limited") return durableObjectJson(outcome, 429, request.method);
-      return durableObjectJson(outcome, 201, request.method);
-    } catch {
-      return durableObjectJson({ status: "unavailable" }, 503, request.method);
-    }
-  }
-
-  async setStatus(request, feedbackId, staff) {
-    if (!staff) return durableObjectJson({ status: "forbidden" }, 403, request.method);
-    if (!ACTIVE_SESSION_ID_RE.test(feedbackId)) {
-      return durableObjectJson({ status: "invalid_feedback_id" }, 400, request.method);
-    }
-    const parsed = await readCommunityJson(request, 512);
-    if (parsed.error) return parsed.error;
-    const status = String(parsed.body?.status || "");
-    if (!FEEDBACK_STATUSES.has(status)) {
-      return durableObjectJson({ status: "invalid_status" }, 400, request.method);
-    }
-    try {
-      const outcome = await this.state.storage.transaction(async (transaction) => {
-        const key = await transaction.get(`fb-id:${feedbackId}`);
-        if (!key) return { status: "not_found" };
-        const entry = await transaction.get(key);
-        if (!entry || entry.hidden) return { status: "not_found" };
-        entry.status = status;
-        await transaction.put(key, entry);
-        return { status: "ok", item_status: status };
-      });
-      if (outcome.status === "not_found") return durableObjectJson(outcome, 404, request.method);
-      return durableObjectJson(outcome, 200, request.method);
-    } catch {
-      return durableObjectJson({ status: "unavailable" }, 503, request.method);
-    }
-  }
-
-  async hide(request, feedbackId, staff) {
-    if (!staff) return durableObjectJson({ status: "forbidden" }, 403, request.method);
-    if (!ACTIVE_SESSION_ID_RE.test(feedbackId)) {
-      return durableObjectJson({ status: "invalid_feedback_id" }, 400, request.method);
-    }
-    try {
-      const outcome = await this.state.storage.transaction(async (transaction) => {
-        const key = await transaction.get(`fb-id:${feedbackId}`);
-        if (!key) return { status: "not_found" };
-        const entry = await transaction.get(key);
-        if (!entry) return { status: "not_found" };
-        entry.hidden = true;
-        await transaction.put(key, entry);
-        return { status: "hidden" };
-      });
-      if (outcome.status === "not_found") return durableObjectJson(outcome, 404, request.method);
-      return durableObjectJson(outcome, 200, request.method);
-    } catch {
-      return durableObjectJson({ status: "unavailable" }, 503, request.method);
-    }
-  }
-}
-
-async function communityJokesResponse(request, env) {
-  if (!env.COMMUNITY_JOKES) {
-    return jsonResponse({ status: "unavailable" }, 503, request.method);
-  }
-  const url = new URL(request.url);
-  let internal;
-  if (url.pathname === "/api/jokes/me") {
-    // Profil akun ringan: nama tampilan + avatar per pemasangan anonim.
-    if (request.method === "GET" || request.method === "HEAD") {
-      const clientId = request.headers.get("x-xydesk-client-id") || "";
-      internal = new Request("https://community-jokes/me", {
-        method: request.method,
-        headers: clientId ? { "x-xydesk-client-id": clientId } : {},
-      });
-    } else if (request.method === "PUT") {
-      const length = Number(request.headers.get("content-length") || 0);
-      if (length > 1_600_000) return jsonResponse({ status: "payload_too_large" }, 413, request.method);
-      const bounded = await readRequestTextLimited(request, 1_600_000);
-      if (bounded.tooLarge) return jsonResponse({ status: "payload_too_large" }, 413, request.method);
-      if (bounded.invalid) return jsonResponse({ status: "invalid_request" }, 400, request.method);
-      internal = new Request("https://community-jokes/me", {
-        method: "PUT",
-        headers: { "content-type": request.headers.get("content-type") || "" },
-        body: bounded.text,
-      });
-    } else {
-      return methodNotAllowed("GET, HEAD, PUT");
-    }
-  } else if (/^\/api\/jokes\/avatar\//i.test(url.pathname)) {
-    return serveCommunityBinary(request, env, url);
-  } else {
-    return jsonResponse({ status: "not_found" }, 404, request.method);
-  }
-
-  try {
-    const id = env.COMMUNITY_JOKES.idFromName("xydesk-community-jokes-v1");
-    const res = await env.COMMUNITY_JOKES.get(id).fetch(internal.clone());
-    if (res.status !== 503 || !(env.UNIQUE_DOWNLOADS && typeof env.UNIQUE_DOWNLOADS.get === "function")) {
-      return res;
-    }
-  } catch {
-    if (!(env.UNIQUE_DOWNLOADS && typeof env.UNIQUE_DOWNLOADS.get === "function")) {
-      return jsonResponse({ status: "unavailable" }, 503, request.method);
-    }
-  }
-  return await getEdgeFallbackCommunityJokes(env).fetch(internal);
-}
-
-async function feedbackResponse(request, env) {
-  if (!env.FEEDBACK_BOARD) {
-    return jsonResponse({ status: "unavailable" }, 503, request.method);
-  }
-  const url = new URL(request.url);
-  // Token staff diverifikasi di tepi ini; DO hanya menerima flag internal
-  // yang tidak bisa dipalsukan dari luar (DO tidak terekspos publik).
-  const staffToken = request.headers.get("x-xydesk-staff-token") || "";
-  const staffVerified = Boolean(env.FEEDBACK_STAFF_TOKEN && staffToken && staffToken === env.FEEDBACK_STAFF_TOKEN);
-  const staffHeader = staffVerified ? { "x-xydesk-verified-staff": "1" } : {};
-
-  let internal;
-  if (url.pathname === "/api/feedback" && (request.method === "GET" || request.method === "HEAD")) {
-    internal = new Request("https://feedback-board/list", { method: request.method, headers: { ...staffHeader } });
-  } else if (url.pathname === "/api/feedback" && request.method === "POST") {
-    const length = Number(request.headers.get("content-length") || 0);
-    if (length > 9_216) return jsonResponse({ status: "payload_too_large" }, 413, request.method);
-    const bounded = await readRequestTextLimited(request, 9_216);
-    if (bounded.tooLarge) return jsonResponse({ status: "payload_too_large" }, 413, request.method);
-    if (bounded.invalid) return jsonResponse({ status: "invalid_request" }, 400, request.method);
-    internal = new Request("https://feedback-board/submit", {
-      method: "POST",
-      headers: { "content-type": request.headers.get("content-type") || "", ...staffHeader },
-      body: bounded.text,
-    });
-  } else {
-    const match = url.pathname.match(/^\/api\/feedback\/([0-9a-f-]{36})\/(reply|status|hide)$/i);
-    if (!match || request.method !== "POST") {
-      return match ? methodNotAllowed("POST") : jsonResponse({ status: "not_found" }, 404, request.method);
-    }
-    const cap = match[2] === "reply" ? 5_120 : 1_024;
-    const length = Number(request.headers.get("content-length") || 0);
-    if (length > cap) return jsonResponse({ status: "payload_too_large" }, 413, request.method);
-    const bounded = await readRequestTextLimited(request, cap);
-    if (bounded.tooLarge) return jsonResponse({ status: "payload_too_large" }, 413, request.method);
-    if (bounded.invalid) return jsonResponse({ status: "invalid_request" }, 400, request.method);
-    internal = new Request(`https://feedback-board/${match[2]}/${match[1]}`, {
-      method: "POST",
-      headers: { "content-type": request.headers.get("content-type") || "", ...staffHeader },
-      body: bounded.text,
-    });
-  }
-
-  try {
-    const id = env.FEEDBACK_BOARD.idFromName("xydesk-feedback-board-v1");
-    const res = await env.FEEDBACK_BOARD.get(id).fetch(internal.clone());
-    if (res.status !== 503 || !(env.UNIQUE_DOWNLOADS && typeof env.UNIQUE_DOWNLOADS.get === "function")) {
-      return res;
-    }
-  } catch {
-    if (!(env.UNIQUE_DOWNLOADS && typeof env.UNIQUE_DOWNLOADS.get === "function")) {
-      return jsonResponse({ status: "unavailable" }, 503, request.method);
-    }
-  }
-  return await getEdgeFallbackFeedbackBoard(env).fetch(internal);
-}
-
 
 const LIVE_DATA_PACK_VERSION = "2026.10.20.66";
 const EDGE_KV_STORES = new Map();
@@ -2110,146 +1336,8 @@ function wrapKvWithEdgeCache(rawKv, d1Db = null) {
   return wrapped;
 }
 
-export function createKvBackedStorage(env, kvKey) {
-  let stateObj = EDGE_KV_STORES.get(kvKey);
-  if (!stateObj) {
-    stateObj = { map: new Map(), loadedAt: 0, inFlightSync: null, backupMerged: false, lastKvRef: null };
-    EDGE_KV_STORES.set(kvKey, stateObj);
-  }
-  const kv = env?.UNIQUE_DOWNLOADS && typeof env.UNIQUE_DOWNLOADS.get === "function"
-    ? wrapKvWithEdgeCache(env.UNIQUE_DOWNLOADS, env?.XYDESK_DB || null)
-    : null;
-  if (stateObj.lastKvRef !== kv) {
-    stateObj.lastKvRef = kv;
-    stateObj.loadedAt = 0;
-    stateObj.inFlightSync = null;
-    stateObj.backupMerged = false;
-    stateObj.map = new Map();
-  }
-  const syncTtlMs = env?.XYDESK_DB ? 350 : 80;
-
-  async function syncFromKv(force = false) {
-    if (!kv) return;
-    const now = Date.now();
-    if (!force && stateObj.loadedAt > 0 && now - stateObj.loadedAt < syncTtlMs) return;
-    if (!force && stateObj.inFlightSync) {
-      await stateObj.inFlightSync;
-      return;
-    }
-    const doSync = (async () => {
-      try {
-        const raw = await kv.get(kvKey);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-            stateObj.map = new Map(Object.entries(parsed));
-          }
-        }
-        stateObj.loadedAt = Date.now();
-      } catch {} finally {
-        stateObj.inFlightSync = null;
-      }
-    })();
-    stateObj.inFlightSync = doSync;
-    await doSync;
-  }
-
-  async function flushToKv() {
-    if (!kv) return;
-    try {
-      const obj = Object.fromEntries(stateObj.map.entries());
-      await kv.put(kvKey, JSON.stringify(obj));
-      stateObj.loadedAt = Date.now();
-    } catch {}
-  }
-
-  const txApi = {
-    async get(key) {
-      return stateObj.map.get(key);
-    },
-    async put(key, value) {
-      stateObj.map.set(key, value);
-    },
-    async delete(key) {
-      return stateObj.map.delete(key);
-    },
-    async list(opts = {}) {
-      const prefix = typeof opts.prefix === "string" ? opts.prefix : "";
-      const start = typeof opts.start === "string" ? opts.start : null;
-      const end = typeof opts.end === "string" ? opts.end : null;
-      const reverse = Boolean(opts.reverse);
-      const limit = Number.isFinite(opts.limit) && opts.limit > 0 ? opts.limit : Infinity;
-      let keys = [...stateObj.map.keys()].filter((k) => {
-        if (prefix && !k.startsWith(prefix)) return false;
-        if (start !== null && k < start) return false;
-        if (end !== null && k >= end) return false;
-        return true;
-      }).sort();
-      if (reverse) keys.reverse();
-      if (keys.length > limit) keys = keys.slice(0, limit);
-      const out = new Map();
-      for (const k of keys) out.set(k, stateObj.map.get(k));
-      return out;
-    },
-    async getAlarm() { return null; },
-    async setAlarm() {},
-    async deleteAlarm() {},
-  };
-
-  return {
-    async get(key) {
-      await syncFromKv(false);
-      return stateObj.map.get(key);
-    },
-    async put(key, value) {
-      await syncFromKv(true);
-      stateObj.map.set(key, value);
-      await flushToKv();
-    },
-    async delete(key) {
-      await syncFromKv(true);
-      const res = stateObj.map.delete(key);
-      await flushToKv();
-      return res;
-    },
-    async list(opts = {}) {
-      await syncFromKv(false);
-      return txApi.list(opts);
-    },
-    async transaction(fn) {
-      await syncFromKv(true);
-      const result = await fn(txApi);
-      await flushToKv();
-      return result;
-    },
-    async getAlarm() { return null; },
-    async setAlarm() {},
-    async deleteAlarm() {},
-  };
-}
-
 let EDGE_FALLBACK_JOKES_INSTANCE = null;
-function getEdgeFallbackCommunityJokes(env) {
-  if (!EDGE_FALLBACK_JOKES_INSTANCE || EDGE_FALLBACK_JOKES_INSTANCE.env !== env) {
-    EDGE_FALLBACK_JOKES_INSTANCE = new CommunityJokes(
-      { storage: createKvBackedStorage(env, "do_fallback:community_jokes_v1") },
-      env,
-    );
-  }
-  return EDGE_FALLBACK_JOKES_INSTANCE;
-}
-
 let EDGE_FALLBACK_FEEDBACK_INSTANCE = null;
-function getEdgeFallbackFeedbackBoard(env) {
-  if (!EDGE_FALLBACK_FEEDBACK_INSTANCE || EDGE_FALLBACK_FEEDBACK_INSTANCE.env !== env) {
-    EDGE_FALLBACK_FEEDBACK_INSTANCE = new FeedbackBoard(
-      { storage: createKvBackedStorage(env, "do_fallback:feedback_board_v1") },
-      env,
-    );
-  }
-  return EDGE_FALLBACK_FEEDBACK_INSTANCE;
-}
-
 const DEFAULT_ONESIGNAL_APP_ID = "e3d5adea-1c0f-4986-9ce5-e088d65f0998";
 
 function normalizeCountryCode(raw, fallback = "ID") {
@@ -2507,8 +1595,9 @@ export default {
     // pindah ke Firebase Firestore. Jalur relay Durable Object untuk PESAN
     // dimatikan total (410) supaya tidak ada lagi penyimpanan chat di
     // Cloudflare; riwayat resmi ada di Firestore + arsip lokal HP pengguna.
-    // Yang tetap hidup: presence (penghitung online sesaat), push-relay
-    // (pemicu notifikasi mode Firebase), translate, dan channels resmi.
+    // Setelah perombakan RDP-only (2026-11): yang bertahan hanya terjemahan
+    // UI dan kanal resmi. Sisa fitur komunitas/notifikasi/pelaporan sesi
+    // ikut dicabut dan dijawab 410 di bawah.
     if (
       path === "/ws/chat" ||
       path === "/api/chat/history" ||
@@ -2524,6 +1613,25 @@ export default {
           code: "chat_moved_to_firebase",
           message: "Chat global telah pindah ke Firebase. Perbarui aplikasi XyDesk Remote.",
         },
+        410,
+        request.method,
+      );
+    }
+    // Fitur komunitas/feedback/notifikasi/pelaporan sesi sudah dicabut
+    // (produk RDP-only). Endpoint lama menjawab 410 permanen supaya klien
+    // lama mendapat sinyal jelas, bukan 404 yang memicu retry.
+    if (
+      path === "/api/firebase/token" ||
+      path === "/api/push-update" ||
+      path === "/api/chat/push-relay" ||
+      path === "/api/chat/translate" ||
+      path === "/api/session" ||
+      path === "/api/active-sessions" ||
+      path.startsWith("/api/jokes") ||
+      path.startsWith("/api/feedback")
+    ) {
+      return jsonResponse(
+        { status: "gone", code: "feature_removed", message: "Fitur ini sudah tidak tersedia di XyDesk Remote." },
         410,
         request.method,
       );
@@ -2701,16 +1809,6 @@ export default {
       if (request.method !== "POST") return methodNotAllowed("POST, OPTIONS");
       return uiTranslateResponse(request);
     }
-    if (path === "/api/session") {
-      if (request.method !== "POST") return methodNotAllowed("POST");
-      return sessionReportResponse(request, env);
-    }
-    if (path === "/api/jokes/me" || path.startsWith("/api/jokes/avatar/")) {
-      return communityJokesResponse(request, env);
-    }
-    if (path === "/api/feedback" || path.startsWith("/api/feedback/")) {
-      return feedbackResponse(request, env);
-    }
     if (path === "/api/account/settings") {
       return accountSettingsResponse(request, env);
     }
@@ -2724,7 +1822,6 @@ export default {
     if (path === "/api/stats") return downloadStatsResponse(request, env);
     if (path === "/api/releases") return releasesListResponse(request, env);
     if (path === "/api/update-check") return updateCheckResponse(request, env);
-    if (path === "/api/active-sessions") return activeSessionsResponse(request, env);
     if (path.startsWith("/api/")) return jsonResponse({ status: "not_found" }, 404, request.method);
 
     if (path === "/host" || path === "/host.ps1") {

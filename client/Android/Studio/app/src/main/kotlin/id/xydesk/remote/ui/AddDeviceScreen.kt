@@ -67,7 +67,6 @@ import id.xydesk.remote.core.XyAudioMode
 import id.xydesk.remote.core.XyGateway
 import id.xydesk.remote.security.CredentialVault
 import id.xydesk.remote.ui.components.XyNoticeBus
-import id.xydesk.remote.ui.ssh.XySshTerminalScreen
 import androidx.activity.compose.BackHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -270,7 +269,6 @@ fun AddDeviceScreen(
         }
     }
     var options by remember { mutableStateOf(stored) }
-    var openSshTerminal by remember { mutableStateOf(false) }
     var wolStatusText by remember { mutableStateOf<String?>(null) }
     var gatewayOn by remember { mutableStateOf(stored.gateway != null) }
     var gwHost by remember { mutableStateOf(stored.gateway?.host.orEmpty()) }
@@ -542,18 +540,7 @@ fun AddDeviceScreen(
         onSubmit(profile, rememberPass, connect)
     }
 
-    if (openSshTerminal) {
-        XySshTerminalScreen(
-            initialHost = host.substringBefore(":").trim(),
-            initialPort = host.substringAfter(":", "22").toIntOrNull() ?: 22,
-            initialUser = user.ifBlank { "root" },
-            initialPassword = pass,
-            initialLabel = label,
-            autoConnectOnStart = false,
-            onBack = { openSshTerminal = false },
-        )
-        return
-    }
+
 
     Box(Modifier.fillMaxSize()) {
     Column(
@@ -675,19 +662,6 @@ fun AddDeviceScreen(
                     },
                     modifier = Modifier.fillMaxWidth(),
                 )
-                // SSH/VPS bukan jalur utama pemula. Sembunyikan di mode cepat
-                // supaya layar pertama tidak terasa seperti panel sysadmin;
-                // tetap tersedia lewat tab Lanjutan.
-                if (showAdvanced) {
-                    XyPillButton(
-                        text = xy("Terminal SSH / Linux VPS (Ubuntu, Debian, Linux Polos)", "SSH Terminal / Linux VPS (Ubuntu, Debian, Plain Linux)"),
-                        icon = XyIcons.Terminal,
-                        primary = false,
-                        compact = true,
-                        onClick = { openSshTerminal = true },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
             }
 
             XySectionLabel(

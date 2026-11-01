@@ -104,7 +104,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import id.xydesk.remote.privacy.ActiveSessionStatsReporter
 import java.util.UUID
 import kotlin.math.roundToInt
 
@@ -244,33 +243,6 @@ fun XyDeskSessionScreen(
     val stage by manager.stage.collectAsState(initial = SessionManager.Stage.IDLE)
     val telemetry by manager.telemetry.collectAsState(initial = TelemetrySample.EMPTY)
 
-    // Anonymous active-session counting is on by default and can be disabled in Privacy settings.
-    // Best-effort heartbeat uses a fresh random session UUID; no host/profile/account details.
-    // Super-cepat 8 detik + burst awal untuk total online/update akurat
-    LaunchedEffect(state is SessionState.Connected, profile.id) {
-        if (state !is SessionState.Connected) return@LaunchedEffect
-        if (!appPrefs.shareActiveSessionStats) return@LaunchedEffect
-        val statsSessionId = UUID.randomUUID()
-        try {
-            repeat(2) {
-                withContext(Dispatchers.IO) { ActiveSessionStatsReporter.heartbeat(statsSessionId) }
-                runCatching { AppUpdate.refreshOnlineCount(context) }
-                delay(2_000L)
-                if (manager.state.value !is SessionState.Connected) return@LaunchedEffect
-            }
-            while (isActive && manager.state.value is SessionState.Connected && appPrefs.shareActiveSessionStats) {
-                withContext(Dispatchers.IO) {
-                    ActiveSessionStatsReporter.heartbeat(statsSessionId)
-                }
-                runCatching { AppUpdate.refreshOnlineCount(context) }
-                delay(8_000L)
-            }
-        } finally {
-            withContext(NonCancellable + Dispatchers.IO) {
-                ActiveSessionStatsReporter.end(statsSessionId)
-            }
-        }
-    }
     LaunchedEffect(state is SessionState.Connected, remoteRecorder) {
         if (state !is SessionState.Connected) remoteRecorder.stop()
     }
@@ -425,39 +397,8 @@ fun XyDeskSessionScreen(
     // Notifikasi koneksi putus tak terduga (backlog 2026-10-15): saat sesi
     // yang tadinya tersambung mati sendiri (bukan user disconnect, bukan
     // sedang retry/ubah-resolusi) DAN app sedang di background, kasih tahu
-    // user lewat notif — di foreground layar status sudah jelas.
-    val sessionLifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
-    var finalDropped by remember { mutableStateOf(false) }
-    LaunchedEffect(state, everConnected, userDisconnect, applyingResolution, reconnecting) {
-        val dropped = everConnected && !userDisconnect && !applyingResolution && !reconnecting &&
-            (state is SessionState.Disconnected || state is SessionState.Error)
-        finalDropped = dropped
-        val resumed = sessionLifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
-        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
-        if (nm == null) return@LaunchedEffect
-        if (dropped && !resumed) {
-            postDisconnectNotification(context, profile.label ?: profile.host)
-        } else if (!dropped) {
-            nm.cancel(DISCONNECT_NOTIF_ID)
-        }
-    }
-    DisposableEffect(sessionLifecycleOwner) {
-        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager ?: return@LifecycleEventObserver
-            when (event) {
-                Lifecycle.Event.ON_RESUME -> nm.cancel(DISCONNECT_NOTIF_ID)
-                // Baru pindah ke background saat sesi sudah mati final → tetap
-                // kasih tahu. Kecuali activity memang sedang ditutup (user
-                // sudah melihat layar status lalu back).
-                Lifecycle.Event.ON_PAUSE -> if (finalDropped && (context as? Activity)?.isFinishing != true) {
-                    postDisconnectNotification(context, profile.label ?: profile.host)
-                }
-                else -> {}
-            }
-        }
-        sessionLifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { sessionLifecycleOwner.lifecycle.removeObserver(observer) }
-    }
+
+
 
     // Jangan akhiri UI sesi saat transport terputus sementara. Tetap di layar,
     // retry tanpa batas dengan backoff (2, 4, 8, 16, lalu 30 detik), dan biarkan
@@ -743,7 +684,6 @@ fun XyDeskSessionScreen(
     }
 
     // Foreground service: sesi tetap hidup saat app ditinggal ke latar, dan
-    // notifikasinya memberi jalan pulang + tombol putus.
     LaunchedEffect(state, userDisconnect) {
         val label = profile.label ?: "${profile.host}:${profile.port}"
         val active = !userDisconnect &&
@@ -1766,7 +1706,6 @@ fun XyDeskSessionScreen(
                     // 2026-10-12: moveTaskToBack malah menutup app ke desktop
                     // HP). Beranda app diangkat ke depan task; activity sesi
                     // tetap hidup di bawahnya sehingga koneksi + service jalan
-                    // terus. Buka lagi dari kartu "Sesi aktif" / notifikasi.
                     (context as? XyDeskSessionActivity)?.markIntentionalHomeNavigation()
                     appPrefs.clearAutoResumeSession()
                     controller.blurInput()

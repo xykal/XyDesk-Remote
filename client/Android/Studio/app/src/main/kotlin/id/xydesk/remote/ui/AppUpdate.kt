@@ -46,7 +46,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import id.xydesk.remote.push.ChatPushNotifier
 import id.xydesk.remote.ui.components.XyIcons
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -606,27 +605,7 @@ internal object AppUpdate {
             if (prefs.getString(KEY_LAST_UPDATE_NOTIFIED, "") == notifyKey) return@runCatching
             prefs.edit().putString(KEY_LAST_UPDATE_NOTIFIED, notifyKey).apply()
 
-            if (apkNewer) {
-                ChatPushNotifier.notifyAppUpdateAvailable(
-                    context = appContext,
-                    title = xyNow("Update Aplikasi Tersedia · v${info.version}", "App Update Available · v${info.version}"),
-                    summary = xyNow(
-                        "Versi besar v${info.version} telah rilis! Ketuk untuk unduh & pasang langsung dari HP.",
-                        "Major release v${info.version} is out! Tap to download & install directly on your phone.",
-                    ),
-                    isDataPack = false,
-                )
-            } else if (dataNewer) {
-                ChatPushNotifier.notifyAppUpdateAvailable(
-                    context = appContext,
-                    title = xyNow("Update Data Ringan Tersedia · ${info.dataPackVersion}", "Live Data Update Available · ${info.dataPackVersion}"),
-                    summary = xyNow(
-                        "Paket data baru siap diunduh langsung di dalam aplikasi (Download Data) tanpa perlu instal ulang APK!",
-                        "New data pack is ready to download inside the app without reinstalling the APK!",
-                    ),
-                    isDataPack = true,
-                )
-            }
+
         }
     }
 

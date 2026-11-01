@@ -181,10 +181,6 @@ class AppPrefs(context: Context) {
         get() = sp.getBoolean(KEY_CLEAR_CLIPBOARD, false)
         set(v) = sp.edit().putBoolean(KEY_CLEAR_CLIPBOARD, v).apply()
 
-    /** Anonymous active-session counting; enabled by default and easy to disable. */
-    var shareActiveSessionStats: Boolean
-        get() = sp.getBoolean(KEY_SHARE_ACTIVE_SESSION_STATS, true)
-        set(v) = sp.edit().putBoolean(KEY_SHARE_ACTIVE_SESSION_STATS, v).apply()
 
     companion object {
         private const val NAME = "xydesk.app"
@@ -200,7 +196,6 @@ class AppPrefs(context: Context) {
         private const val KEY_REQUIRE_LOCK = "require_device_lock"
         private const val KEY_AUTO_LOCK_REMOTE = "auto_lock_remote"
         private const val KEY_CLEAR_CLIPBOARD = "clear_clipboard_disconnect"
-        private const val KEY_SHARE_ACTIVE_SESSION_STATS = "share_active_session_stats"
         const val HOME_MENU_POPUP = 0
         const val HOME_MENU_SIDEBAR = 1
     }
