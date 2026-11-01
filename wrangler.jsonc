@@ -70,7 +70,6 @@
       "tag": "v5",
       "deleted_classes": [
         "ActiveSessions",
-        "CommunityJokes",
         "FeedbackBoard"
       ]
     }
