@@ -1220,6 +1220,7 @@ function d1PresenceStub() {
   const statement = (sql, args) => ({
     async run() {
       if (sql.startsWith("INSERT")) rows.set(String(args[0]), Number(args[1]));
+      else if (sql.includes("WHERE id =")) rows.delete(String(args[0]));
       else if (sql.startsWith("DELETE")) {
         for (const [k, v] of [...rows]) if (v < Number(args[0])) rows.delete(k);
       }
@@ -1304,4 +1305,34 @@ test("active-sessions: id salah format tidak dihitung, tanpa D1 tetap 200", asyn
   const body = await noD1.json();
   assert.equal(body.active_session_count, 0);
   assert.ok(body.checked_at);
+});
+
+
+test("api/session: heartbeat gaya lama dihitung, end menghapus, UUID wajib", async () => {
+  const env = envFor({}, { XYDESK_DB: d1PresenceStub() });
+  const sid = "11111111-2222-4333-8444-555555555555";
+  const hb = await worker.fetch(new Request("https://api.xydeskremote.biz.id/api/session", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "heartbeat", session_id: sid }),
+  }), env);
+  assert.equal(hb.status, 200);
+  const hbBody = await hb.json();
+  assert.equal(hbBody.status, "ok");
+  assert.equal(hbBody.active_session_count, 1);
+
+  const end = await worker.fetch(new Request("https://api.xydeskremote.biz.id/api/session", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "end", session_id: sid }),
+  }), env);
+  assert.equal(end.status, 200);
+  assert.equal((await end.json()).active_session_count, 0);
+
+  const bad = await worker.fetch(new Request("https://api.xydeskremote.biz.id/api/session", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "heartbeat", session_id: "bukan-uuid" }),
+  }), env);
+  assert.equal(bad.status, 400);
 });
