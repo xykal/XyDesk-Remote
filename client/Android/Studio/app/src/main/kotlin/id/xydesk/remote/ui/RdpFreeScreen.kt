@@ -1963,27 +1963,23 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                         style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.Bold,
                                     )
-                                    Spacer(Modifier.height(8.dp))
+                                    Spacer(Modifier.height(10.dp))
+
+                                    // ---- Performa & Data ----
+                                    Text(
+                                        text = "PERFORMA & DATA",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 0.8.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Spacer(Modifier.height(4.dp))
                                     RdpFlatToggleRow(
                                         title = "Anti-Reset Cloud Persistence v4",
                                         subtitle = "Simpan sesi login, Downloads & Desktop otomatis",
                                         checked = autoRenew,
                                         enabled = !busy,
                                         onCheckedChange = { autoRenew = it; saveSettings() },
-                                    )
-                                    RdpFlatToggleRow(
-                                        title = "XyDeskRemote Dashboard + Gaming Boost",
-                                        subtitle = "Buka Dashboard otomatis, Power Plan & Anti-VM",
-                                        checked = xydeskBoost,
-                                        enabled = !busy,
-                                        onCheckedChange = { xydeskBoost = it; saveSettings() },
-                                     )
-                                    RdpFlatToggleRow(
-                                        title = "Redirect Mikrofon Dua Arah (On-Mic)",
-                                        subtitle = "Teruskan suara mikrofon HP ke dalam sesi RDP Windows/Linux",
-                                        checked = microphone,
-                                        enabled = !busy,
-                                        onCheckedChange = { microphone = it; saveSettings() },
                                     )
                                     RdpFlatToggleRow(
                                         title = "Boost FPS (power plan + RDP 60Hz)",
@@ -1999,16 +1995,21 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                         enabled = !busy,
                                         onCheckedChange = { storageBoost = it; saveSettings() },
                                     )
-                                    RdpFlatToggleRow(
-                                        title = "MuMu Player 12 (emulator Android)",
-                                        subtitle = "Best-effort: runner GitHub biasanya tanpa VT-x, MEmu tetap jadi fallback",
-                                        checked = mumuPlayer,
-                                        enabled = !busy,
-                                        onCheckedChange = { mumuPlayer = it; saveSettings() },
+
+                                    Spacer(Modifier.height(10.dp))
+
+                                    // ---- Game & Emulator ----
+                                    Text(
+                                        text = "GAME & EMULATOR",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 0.8.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
+                                    Spacer(Modifier.height(4.dp))
                                     RdpFlatToggleRow(
                                         title = "GTA SA-MP SilentPatch (90 FPS)",
-                                        subtitle = "DirectX 9, VC++, SilentPatchSA & Widescreen Fix",
+                                        subtitle = "DirectX 9, VC++, SilentPatchSA & Widescreen Fix. GTA SA disiapkan otomatis dan disimpan antar sesi",
                                         checked = sampDeps,
                                         enabled = !busy,
                                         onCheckedChange = { sampDeps = it; saveSettings() },
@@ -2033,59 +2034,12 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                             modifier = Modifier.fillMaxWidth(),
                                         )
                                     }
-                                    Spacer(Modifier.height(6.dp))
-                                    Text(
-                                        text = "Catatan: FPS & MuMu bersifat best-effort. Runner GitHub tidak punya GPU fisik maupun virtualisasi sarang; hasilnya bisa dilihat di file fps-boost.json / mumu.json pada run Actions.",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
                                     RdpFlatToggleRow(
-                                        title = "Minecraft Java + OpenGL 4.6 D3D12",
-                                        subtitle = "Temurin JDK 21 & JRE 8, PrismLauncher & anti-GLFW error 65542",
-                                        checked = mcJavaReady,
-                                        enabled = !busy,
-                                        onCheckedChange = {
-                                            mcJavaReady = it
-                                            if (it) grafis = "software"
-                                            saveSettings()
-                                        },
-                                    )
-                                    RdpFlatToggleRow(
-                                        title = "Aplikasi Esensial (Chrome, 7-Zip, Lightshot)",
-                                        subtitle = "Pasang browser dan utilitas dasar secara otomatis",
-                                        checked = ekstraDesktop,
-                                        enabled = !busy,
-                                        onCheckedChange = { ekstraDesktop = it; saveSettings() },
-                                    )
-                                    RdpFlatToggleRow(
-                                        title = "Discord",
-                                        subtitle = "Pasang Discord desktop di sesi RDP (siap login)",
-                                        checked = discordReady,
-                                        enabled = !busy,
-                                        onCheckedChange = { discordReady = it; saveSettings() },
-                                    )
-                                    RdpFlatToggleRow(
-                                        title = "Tema Visual Windows 10 & Wallpaper XyVerse",
-                                        subtitle = "Matikan pop-up Server Manager saat masuk desktop",
-                                        checked = win10Theme,
-                                        enabled = !busy,
-                                        onCheckedChange = { win10Theme = it; saveSettings() },
-                                    )
-                                    // Dulu dua fitur ini digabung jadi satu toggle,
-                                    // jadi pengguna tidak bisa memilih salah satu.
-                                    RdpFlatToggleRow(
-                                        title = "Roblox Anti-VM",
-                                        subtitle = "Runtime Windows Store + Direct3D 11 WARP",
+                                        title = "Roblox Player & Studio",
+                                        subtitle = "Instalasi resmi + optimasi WARP. VM dapat ditolak anti-cheat Roblox — tanpa spoofing/bypass",
                                         checked = robloxReady,
                                         enabled = !busy,
                                         onCheckedChange = { robloxReady = it; saveSettings() },
-                                    )
-                                    RdpFlatToggleRow(
-                                        title = "Minecraft Bedrock Launcher",
-                                        subtitle = "Pasang launcher Bedrock di sesi RDP",
-                                        checked = mcBedrockReady,
-                                        enabled = !busy,
-                                        onCheckedChange = { mcBedrockReady = it; saveSettings() },
                                     )
                                     if (robloxReady) {
                                         Spacer(Modifier.height(6.dp))
@@ -2107,6 +2061,96 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                             modifier = Modifier.fillMaxWidth(),
                                         )
                                     }
+                                    RdpFlatToggleRow(
+                                        title = "Minecraft Java + OpenGL 4.6 D3D12",
+                                        subtitle = "Temurin JDK 21 & JRE 8, PrismLauncher & anti-GLFW error 65542",
+                                        checked = mcJavaReady,
+                                        enabled = !busy,
+                                        onCheckedChange = {
+                                            mcJavaReady = it
+                                            if (it) grafis = "software"
+                                            saveSettings()
+                                        },
+                                    )
+                                    RdpFlatToggleRow(
+                                        title = "Minecraft Bedrock Launcher",
+                                        subtitle = "Pasang launcher Bedrock di sesi RDP",
+                                        checked = mcBedrockReady,
+                                        enabled = !busy,
+                                        onCheckedChange = { mcBedrockReady = it; saveSettings() },
+                                    )
+                                    RdpFlatToggleRow(
+                                        title = "MuMu Player 12 (emulator Android)",
+                                        subtitle = "Best-effort: runner GitHub biasanya tanpa VT-x, MEmu tetap jadi fallback",
+                                        checked = mumuPlayer,
+                                        enabled = !busy,
+                                        onCheckedChange = { mumuPlayer = it; saveSettings() },
+                                    )
+
+                                    Spacer(Modifier.height(10.dp))
+
+                                    // ---- Aplikasi & Tampilan ----
+                                    Text(
+                                        text = "APLIKASI & TAMPILAN",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 0.8.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Spacer(Modifier.height(4.dp))
+                                    RdpFlatToggleRow(
+                                        title = "Aplikasi Esensial (Chrome, 7-Zip, Lightshot)",
+                                        subtitle = "Pasang browser dan utilitas dasar secara otomatis",
+                                        checked = ekstraDesktop,
+                                        enabled = !busy,
+                                        onCheckedChange = { ekstraDesktop = it; saveSettings() },
+                                    )
+                                    RdpFlatToggleRow(
+                                        title = "Discord",
+                                        subtitle = "Pasang Discord desktop di sesi RDP (siap login)",
+                                        checked = discordReady,
+                                        enabled = !busy,
+                                        onCheckedChange = { discordReady = it; saveSettings() },
+                                    )
+                                    RdpFlatToggleRow(
+                                        title = "Tema Visual Windows 10 & Wallpaper XyVerse",
+                                        subtitle = "Matikan pop-up Server Manager saat masuk desktop",
+                                        checked = win10Theme,
+                                        enabled = !busy,
+                                        onCheckedChange = { win10Theme = it; saveSettings() },
+                                    )
+
+                                    Spacer(Modifier.height(10.dp))
+
+                                    // ---- Sesi & Audio ----
+                                    Text(
+                                        text = "SESI & AUDIO",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 0.8.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Spacer(Modifier.height(4.dp))
+                                    RdpFlatToggleRow(
+                                        title = "XyDeskRemote Dashboard + Gaming Boost",
+                                        subtitle = "Buka Dashboard otomatis + Power Plan gaming (tanpa klaim anti-VM)",
+                                        checked = xydeskBoost,
+                                        enabled = !busy,
+                                        onCheckedChange = { xydeskBoost = it; saveSettings() },
+                                    )
+                                    RdpFlatToggleRow(
+                                        title = "Redirect Mikrofon Dua Arah (On-Mic)",
+                                        subtitle = "Teruskan suara mikrofon HP ke dalam sesi RDP Windows/Linux",
+                                        checked = microphone,
+                                        enabled = !busy,
+                                        onCheckedChange = { microphone = it; saveSettings() },
+                                    )
+                                    Spacer(Modifier.height(6.dp))
+                                    Text(
+                                        text = "Catatan: FPS, MuMu, dan game bersifat best-effort. Runner GitHub tidak punya GPU fisik maupun virtualisasi sarang; hasilnya bisa dilihat di file fps-boost.json / mumu.json pada run Actions.",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
                                 }
                             }
 
