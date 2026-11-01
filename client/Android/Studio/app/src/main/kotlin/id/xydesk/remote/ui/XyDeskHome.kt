@@ -127,7 +127,6 @@ private sealed interface XyRoute {
     data class EditDevice(val profile: ConnectionProfile?) : XyRoute
     data object Section : XyRoute
 
-    /** Feed Berita — layar sendiri, dipetakan ke tab nav [XyTab.FEED]. */
 
     /** Dashboard pengaturan — dipetakan ke tab nav [XyTab.PROFILE]. */
     data object Profile : XyRoute
@@ -185,7 +184,6 @@ fun XyDeskHome(
     var showCrash by remember { mutableStateOf(false) }
     val bootTail = remember { ConnectionLog.tailFromFile(context.applicationContext, 20) }
     var showBoot by remember { mutableStateOf(false) }
- { mutableStateOf(false) }
     // Pembaruan app: cek maksimal 12 jam sekali; dialog muncul bila portal
     // melaporkan versi lebih baru yang belum dilewati user.
     var updateInfo by remember { mutableStateOf<AppUpdateInfo?>(null) }
@@ -534,10 +532,7 @@ fun XyDeskHome(
                     updateStatusText = status
                 }
             },
-            onFeedback = {
-                drawerOpen = false
-                feedbackOpen = true
-            },
+            onFeedback = {},
             version = "v${appVersion(context)}",
         )
     }
@@ -1646,22 +1641,6 @@ private fun DevicesScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                 )
-                XyRow(
-                    title = xy("Koneksi PC (ID & Password)", "PC Connection (ID & Password)"),
-                    modifier = Modifier.padding(horizontal = 2.dp),
-                    trailing = {
-                        Text(
-                            xy("Eksperimental", "Experimental"),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            maxLines = 1,
-                        )
-                    },
-                    onClick = {
-                        showAddBubble = false
-                        onAddPcQuick()
-                    },
-                )
 
                 XyRow(
                     title = xy("Koneksi RDP (Host / IP)", "RDP Connection (Host / IP)"),
@@ -1669,22 +1648,6 @@ private fun DevicesScreen(
                     onClick = {
                         showAddBubble = false
                         onAddRdp()
-                    },
-                )
-                XyRow(
-                    title = xy("Terminal SSH / Linux VPS", "SSH Terminal / Linux VPS"),
-                    modifier = Modifier.padding(horizontal = 2.dp),
-                    trailing = {
-                        Text(
-                            "SSH-2",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            maxLines = 1,
-                        )
-                    },
-                    onClick = {
-                        showAddBubble = false
-                        onOpenSshTerminal()
                     },
                 )
                 XyRow(

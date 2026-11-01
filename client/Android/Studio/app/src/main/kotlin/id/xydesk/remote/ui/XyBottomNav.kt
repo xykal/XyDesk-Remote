@@ -98,7 +98,7 @@ internal fun XyBottomNav(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            listOf(XyTab.HOME, XyTab.FEED, XyTab.PROFILE).forEach { tab ->
+            listOf(XyTab.HOME, XyTab.PROFILE).forEach { tab ->
                 val active = tab == selected
                 val title = xy(tab.title, tab.titleEn)
                 val pillColor by animateColorAsState(

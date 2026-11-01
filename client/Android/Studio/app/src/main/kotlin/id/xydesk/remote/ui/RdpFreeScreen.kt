@@ -76,7 +76,6 @@ import id.xydesk.remote.ui.rdp.XyRdpConfig
 import id.xydesk.remote.ui.rdp.XyRdpPhase
 import id.xydesk.remote.ui.rdp.XyRdpSetupStatus
 import id.xydesk.remote.ui.rdp.XyRdpValidatedSession
-import id.xydesk.remote.ui.ssh.XySshTerminalScreen
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -125,11 +124,6 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
     var runnerImage by remember { mutableStateOf(prefs.getString("runner", "windows-2022") ?: "windows-2022") }
     var linuxMode by remember { mutableStateOf(prefs.getString("linux_mode", "desktop") ?: "desktop") }
     var hostname by remember { mutableStateOf(prefs.getString("hostname", "rdpfree") ?: "rdpfree") }
-    var openSshTerminal by remember { mutableStateOf(false) }
-    var sshInitHost by remember { mutableStateOf("") }
-    var sshInitPort by remember { mutableIntStateOf(22) }
-    var sshInitUser by remember { mutableStateOf("xyadmin") }
-    var sshInitAuto by remember { mutableStateOf(false) }
     var rdpUser by remember { mutableStateOf(prefs.getString("rdp_user", "xyadmin") ?: "xyadmin") }
     var akses by remember { mutableStateOf(prefs.getString("akses", "tailscale") ?: "tailscale") }
     var portmapHost by remember { mutableStateOf(prefs.getString("portmap_host", "") ?: "") }
@@ -464,18 +458,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
         }
     }
 
-    if (openSshTerminal) {
-        XySshTerminalScreen(
-            initialHost = sshInitHost,
-            initialPort = sshInitPort,
-            initialUser = sshInitUser,
-            initialPassword = password,
-            initialLabel = if (sshInitHost.isNotBlank()) "XyRDP Linux ($sshInitHost)" else "",
-            autoConnectOnStart = sshInitAuto,
-            onBack = { openSshTerminal = false },
-        )
-        return
-    }
+
 
     Column(
         modifier = Modifier
@@ -1476,26 +1459,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                             isPassword = true,
                                         )
                                         Spacer(Modifier.height(10.dp))
-                                        if (isSessionPolos) {
-                                            XyPillButton(
-                                                text = "Masuk SSH",
-                                                icon = XyIcons.Terminal,
-                                                onClick = {
-                                                    if (rememberPasswordLocal && password.isNotBlank()) {
-                                                        vault.put("xyrdp.saved.rdp_password", password)
-                                                    }
-                                                    sshInitHost = hostToConnect
-                                                    sshInitPort = portToConnect
-                                                    sshInitUser = a.rdpUser
-                                                    sshInitAuto = true
-                                                    openSshTerminal = true
-                                                },
-                                                primary = true,
-                                                enabled = !busy && password.isNotBlank(),
-                                                modifier = Modifier.fillMaxWidth(),
-                                            )
-                                        } else {
-                                            XyPillButton(
+                                        XyPillButton(
                                                 text = "Masuk RDP",
                                                 icon = XyIcons.Monitor,
                                                 onClick = {
@@ -1533,28 +1497,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                                 enabled = !busy && password.isNotBlank(),
                                                 modifier = Modifier.fillMaxWidth(),
                                             )
-                                            if (isSessionLinux) {
-                                                Spacer(Modifier.height(8.dp))
-                                                XyPillButton(
-                                                    text = "Terminal SSH (:22)",
-                                                    icon = XyIcons.Terminal,
-                                                    onClick = {
-                                                        if (rememberPasswordLocal && password.isNotBlank()) {
-                                                            vault.put("xyrdp.saved.rdp_password", password)
-                                                        }
-                                                        sshInitHost = hostToConnect
-                                                        sshInitPort = 22
-                                                        sshInitUser = a.rdpUser
-                                                        sshInitAuto = true
-                                                        openSshTerminal = true
-                                                    },
-                                                    primary = false,
-                                                    compact = true,
-                                                    enabled = !busy && password.isNotBlank(),
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                )
-                                            }
-                                        }
+
                                     }
                                 }
 
