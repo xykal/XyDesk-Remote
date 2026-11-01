@@ -67,6 +67,11 @@ class AppPrefs(context: Context) {
         get() = sp.getBoolean("notif_home_button", true)
         set(v) = sp.edit().putBoolean("notif_home_button", v).apply()
 
+    /** Hitungan pengguna online anonim (UUID acak per sesi, tanpa data pribadi). */
+    var shareActiveSessionStats: Boolean
+        get() = sp.getBoolean("share_active_session_stats", true)
+        set(v) = sp.edit().putBoolean("share_active_session_stats", v).apply()
+
     /** Reopen the last connected profile once on app return; manual disconnect clears the marker. */
     var autoResumeLastSession: Boolean
         get() = sp.getBoolean(KEY_AUTO_RESUME_LAST_SESSION, true)

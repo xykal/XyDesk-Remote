@@ -230,6 +230,28 @@
 
     @media (min-width: 981px) {
       .mobile-dl-quick { display: none; }
+      /* Desktop: pakai nav bar inline — hamburger + aksi mobile disembunyikan. */
+      .mobile-actions { display: none; }
+    }
+
+    /* Tautan navigasi desktop (inline, bukan hamburger). */
+    .nav-link {
+      display: inline-flex;
+      align-items: center;
+      padding: 8px 12px;
+      border-radius: 10px;
+      font-size: 13.5px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: var(--text-dim);
+      text-decoration: none;
+      white-space: nowrap;
+      transition: color 0.14s ease, background-color 0.14s ease;
+    }
+
+    .nav-link:hover {
+      color: var(--text);
+      background: var(--surface-alt);
     }
 
     .hamburger-btn {
@@ -292,7 +314,9 @@
       display: block;
     }
 
-    /* Mode bubble: kartu kecil nempel di bawah header, dekat hamburger. */
+    /* Mode bubble: kartu kecil nempel di bawah header, dekat hamburger.
+       Sengaja TIDAK ada mode fullscreen — hamburger hanya tampil di Android/layar
+       kecil; desktop memakai nav bar inline. */
     @media (max-width: 1023px) {
       .mobile-drawer {
         position: absolute;
@@ -307,31 +331,6 @@
         max-height: calc(100dvh - 76px);
         overflow-y: auto;
         z-index: 90;
-      }
-    }
-
-    /* Mode fullscreen: menu menutupi seluruh layar desktop. */
-    @media (min-width: 1024px) {
-      .mobile-drawer.open {
-        position: fixed;
-        inset: 0;
-        z-index: 90;
-        background: var(--surface);
-        display: flex;
-        align-items: center;
-        overflow-y: auto;
-        padding: 84px 0 32px;
-      }
-
-      .mobile-drawer .drawer-grid {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 12px;
-      }
-
-      .mobile-drawer .drawer-link {
-        min-height: 62px;
-        font-size: 15.5px;
-        border-radius: 12px;
       }
     }
 
@@ -1474,6 +1473,10 @@
         <span class="brand-tag mono" data-dyn="ver">Ver 1.1.23</span>
       </a>
       <nav class="nav-row" aria-label="Navigasi Utama">
+        <a href="#jelajahi" class="nav-link" data-i18n="nav.features">Fitur</a>
+        <a href="abi.html" class="nav-link" data-i18n="nav.abi.short">Cek APK</a>
+        <a href="host.html" class="nav-link" data-i18n="nav.host">Host Agent Windows</a>
+        <a href="status.html" class="nav-link" data-i18n="nav.status">Status Sistem</a>
         <a href="#download" class="pill-btn primary" data-i18n="nav.download">Unduh</a>
         <button type="button" class="pill-btn" id="lang-btn">ID / EN</button>
         <button type="button" class="pill-btn" id="theme-btn">Gelap</button>
@@ -2088,6 +2091,8 @@
         "nav.host": "Host Agent (experimental)",
         "nav.download": "Download",
         "nav.menu": "Menu",
+        "nav.features": "Features",
+        "nav.abi.short": "Check APK",
         "nav.abi": "Check APK for your phone",
         "intro.meta": "Android RDP client · Windows PCs and servers · APK 1.1.8 (69)",
         "intro.title": "Remote Desktop for Windows PCs, from Android.",
@@ -2360,21 +2365,21 @@
   <div class="update-popup-overlay" id="update-popup" aria-hidden="true">
     <div class="update-popup-card" role="dialog" aria-modal="true" aria-labelledby="upd-title">
       <button class="update-popup-close" id="upd-close" aria-label="Tutup">×</button>
-      <div class="update-popup-badge"><span class="dot"></span> Jadwal Rilis Terdekat</div>
-      <h3 id="upd-title">XyDesk Remote — Rilis Baru Segera Hadir</h3>
-      <p class="desc" id="upd-desc">Unduhan APK v1.1.23 akan dibuka segera. Hitung mundur ke jadwal rilis di bawah.</p>
+      <div class="update-popup-badge"><span class="dot"></span> <span id="upd-badge-text">Rilis Terbaru</span></div>
+      <h3 id="upd-title">XyDesk Remote — Versi Terbaru Tersedia</h3>
+      <p class="desc" id="upd-desc">Versi terbaru sudah dirilis publik. Unduh APK resmi atau lihat changelog lengkap.</p>
       <div class="update-popup-meta">
         <div class="update-popup-meta-item">
           <span>Versi Terbaru</span>
-          <strong class="mono" id="upd-version">v1.1.23</strong>
+          <strong class="mono" id="upd-version">v2.0.0</strong>
         </div>
         <div class="update-popup-meta-item">
           <span>Last Update</span>
           <strong class="mono" id="upd-last">—</strong>
         </div>
         <div class="update-popup-meta-item">
-          <span>Hari:Jam:Menit:Detik</span>
-          <div class="countdown mono" id="upd-countdown">00:00:00</div>
+          <span id="upd-countdown-label">Status Rilis</span>
+          <div class="countdown mono" id="upd-countdown">—</div>
         </div>
         <div class="update-popup-meta-item">
           <span>Total Unduhan</span>
@@ -2396,10 +2401,13 @@
     var lastEl=document.getElementById("upd-last");
     var dlEl=document.getElementById("upd-downloads");
     var cdEl=document.getElementById("upd-countdown");
-    var SESSION_KEY="xydesk_update_popup_dismissed_v1_1_23";
-    // Target jadwal rilis DIUNDUR: Sabtu 2026-10-31 00:00:00 UTC
-    // (diundur atas permintaan pemilik 2026-10-24; rilis tetap manual,
-    // countdown ini hanya penanda jadwal, bukan pemicu publish otomatis)
+    var cdLabel=document.getElementById("upd-countdown-label");
+    var badgeEl=document.getElementById("upd-badge-text");
+    var titleEl=document.getElementById("upd-title");
+    var descEl=document.getElementById("upd-desc");
+    var SESSION_KEY="xydesk_update_popup_dismissed_v2_0_0";
+    // Target jadwal rilis. Lewat dari ini = mode "sudah dirilis" (bukan
+    // hitung mundur); ubah tanggal saat menjadwalkan rilis berikutnya.
     var releaseAt=new Date("2026-10-31T00:00:00Z").getTime();
     var nextCheckAt=releaseAt;
     function fmtLast(dateStr){
@@ -2409,8 +2417,20 @@
       var remaining=Math.max(0,releaseAt-Date.now());
       var d=Math.floor(remaining/86400000),h=Math.floor(remaining%86400000/3600000),m=Math.floor(remaining%3600000/60000),s=Math.floor(remaining%60000/1000);
       function pad(n){return n<10?"0"+n:""+n;}
-      if(cdEl) cdEl.textContent=pad(d)+":"+pad(h)+":"+pad(m)+":"+pad(s);
-      if(remaining===0 && cdEl) cdEl.textContent="Telah dirilis — publik";
+      if(!cdEl) return;
+      if(remaining===0){
+        cdEl.textContent="Telah dirilis — publik";
+        if(cdLabel) cdLabel.textContent="Status Rilis";
+        if(badgeEl) badgeEl.textContent="Rilis Terbaru";
+        if(titleEl) titleEl.textContent="XyDesk Remote — Versi Terbaru Tersedia";
+        if(descEl) descEl.textContent="Versi terbaru sudah dirilis publik. Unduh APK resmi atau lihat changelog lengkap.";
+      }else{
+        cdEl.textContent=pad(d)+":"+pad(h)+":"+pad(m)+":"+pad(s);
+        if(cdLabel) cdLabel.textContent="Hari:Jam:Menit:Detik";
+        if(badgeEl) badgeEl.textContent="Jadwal Rilis Terdekat";
+        if(titleEl) titleEl.textContent="XyDesk Remote — Rilis Baru Segera Hadir";
+        if(descEl) descEl.textContent="Hitung mundur ke jadwal rilis di bawah. Pengumuman ini penanda jadwal, bukan pemicu publish otomatis.";
+      }
     }
     (function loop(){ tick(); setTimeout(loop,1000); })();
     function show(){ if(!overlay) return; overlay.classList.add("open"); overlay.setAttribute("aria-hidden","false"); }

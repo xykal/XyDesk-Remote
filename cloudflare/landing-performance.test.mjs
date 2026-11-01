@@ -7,8 +7,12 @@ function harness() {
   let next = 0;
   const timers = new Map(), requests = [], events = {};
   const ctx = {
-    document: {hidden:false, addEventListener:(name, fn)=>events[name]=fn},
+    document: {hidden:false, addEventListener:(name, fn)=>events[name]=fn, getElementById:()=>null},
     AbortController, Number, Error,
+    // Shim untuk xyPresenceId (id anonim): localStorage memori + fallback Math.random.
+    localStorage: {getItem:()=>null, setItem:()=>{}},
+    self: {},
+    currentLang: 'id',
     setTimeout:(fn, ms)=>{timers.set(++next,{fn,ms});return next;},
     clearTimeout:id=>timers.delete(id),
     fetch:(url, options)=>new Promise((resolve,reject)=>{
@@ -19,7 +23,7 @@ function harness() {
     renderActiveSessionStats:()=>{}
   };
   vm.createContext(ctx);
-  vm.runInContext(html.slice(html.indexOf('      var activeStatsInFlight'),html.indexOf('      function renderDownloadStats()')),ctx);
+  vm.runInContext(html.slice(html.indexOf('      function xyPresenceId'),html.indexOf('      function renderDownloadStats()')),ctx);
   return {ctx,timers,requests,events};
 }
 const settle = () => new Promise(resolve=>setImmediate(resolve));
