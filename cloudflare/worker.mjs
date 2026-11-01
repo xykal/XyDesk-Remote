@@ -484,7 +484,103 @@ async function ensurePresenceTable(d1) {
   }
 }
 
-const PRESENCE_WINDOW_MS = 24 * 60 * 60 * 1000;
+// Jendela "online sekarang": id yang ber-detak dalam 5 menit terakhir
+// (heartbeat app lama tiap ~8 detik; halaman web tiap 120 detik).
+const PRESENCE_WINDOW_MS = 5 * 60 * 1000;
+// Coalescing per isolate: satu id cukup menulis D1 maksimal 60 detik sekali —
+// menulis lebih sering hanya membakar kuota tulis tanpa mengubah hitungan.
+const PRESENCE_WRITE_COALESCE_MS = 60 * 1000;
+const presenceWrites = new Map();
+let presenceLastPruneAt = 0;
+
+async function presenceUpsert(d1, id, now, remove = false) {
+  try {
+    if (remove) {
+      await d1.prepare("DELETE FROM web_presence WHERE id = ?").bind(id).run();
+      presenceWrites.delete(id);
+      return;
+    }
+    const last = presenceWrites.get(id);
+    if (last && now - last < PRESENCE_WRITE_COALESCE_MS) return;
+    await d1
+      .prepare(
+        "INSERT INTO web_presence (id, seen_at) VALUES (?, ?) " +
+          "ON CONFLICT(id) DO UPDATE SET seen_at = excluded.seen_at",
+      )
+      .bind(id, now)
+      .run();
+    presenceWrites.set(id, now);
+    if (now - presenceLastPruneAt > 10 * 60 * 1000) {
+      presenceLastPruneAt = now;
+      await d1
+        .prepare("DELETE FROM web_presence WHERE seen_at < ?")
+        .bind(now - 24 * 60 * 60 * 1000)
+        .run();
+    }
+  } catch {
+    // statistik belaka
+  }
+}
+
+async function presenceCount(d1, now) {
+  try {
+    const row = await d1
+      .prepare("SELECT COUNT(*) AS n FROM web_presence WHERE seen_at > ?")
+      .bind(now - PRESENCE_WINDOW_MS)
+      .first();
+    return Number(row?.n) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * POST /api/session — heartbeat anonim gaya klien lama:
+ * {"action": "heartbeat"|"end", "session_id": "<uuid>"}.
+ */
+async function sessionReportResponse(request, env) {
+  const now = Date.now();
+  const checkedAt = new Date(now).toISOString();
+  const contentType = request.headers.get("content-type") || "";
+  if (!contentType.includes("application/json")) {
+    return jsonResponse({ status: "invalid_content_type" }, 415, request.method);
+  }
+  let body = null;
+  try {
+    const raw = await request.text();
+    if (raw.length > 512) {
+      return jsonResponse({ status: "payload_too_large" }, 413, request.method);
+    }
+    body = JSON.parse(raw);
+  } catch {
+    return jsonResponse({ status: "invalid_json" }, 400, request.method);
+  }
+  const sessionId = String(body?.session_id || "");
+  const action = body?.action;
+  if (
+    !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(sessionId) ||
+    (action !== "heartbeat" && action !== "end")
+  ) {
+    return jsonResponse({ status: "invalid_session_report" }, 400, request.method);
+  }
+  const d1 = env?.XYDESK_DB;
+  if (!d1 || typeof d1.prepare !== "function" || !(await ensurePresenceTable(d1))) {
+    return jsonResponse(
+      { status: "ok", active_session_count: 0, checked_at: checkedAt },
+      200,
+      request.method,
+      { "cache-control": "no-store" },
+    );
+  }
+  await presenceUpsert(d1, sessionId.toLowerCase(), now, action === "end");
+  const count = await presenceCount(d1, now);
+  return jsonResponse(
+    { status: "ok", active_session_count: count, checked_at: checkedAt },
+    200,
+    request.method,
+    { "cache-control": "no-store" },
+  );
+}
 
 async function activeSessionsResponse(request, env) {
   if (request.method !== "GET" && request.method !== "HEAD" && request.method !== "POST") {
@@ -501,7 +597,8 @@ async function activeSessionsResponse(request, env) {
     );
   }
   // Id anonim: header X-Presence-Id (halaman) atau body {id} (klien lain).
-  // Format salah diabaikan — angka tetap dilaporkan.
+  // Tidak ada id sama sekali -> identitas longgar dari IP + User-Agent agar
+  // heartbeat lama tetap terhitung. Format salah diabaikan — angka tetap ada.
   let id = String(request.headers.get("X-Presence-Id") || "").trim();
   if (!id && request.method === "POST") {
     try {
@@ -512,8 +609,6 @@ async function activeSessionsResponse(request, env) {
     }
   }
   if (!id) {
-    // Klien lama tanpa id (app 1.1.x): identitas longgar dari IP + User-Agent
-    // supaya heartbeat lama tetap terhitung sebagai pengguna aktif.
     const ip =
       request.headers.get("cf-connecting-ip") ||
       request.headers.get("x-forwarded-for") ||
@@ -529,36 +624,14 @@ async function activeSessionsResponse(request, env) {
       .slice(0, 32);
   }
   if (/^[A-Za-z0-9_-]{8,64}$/.test(id)) {
-    try {
-      await d1
-        .prepare(
-          "INSERT INTO web_presence (id, seen_at) VALUES (?, ?) " +
-            "ON CONFLICT(id) DO UPDATE SET seen_at = excluded.seen_at",
-        )
-        .bind(id, now)
-        .run();
-      await d1
-        .prepare("DELETE FROM web_presence WHERE seen_at < ?")
-        .bind(now - 48 * 60 * 60 * 1000)
-        .run();
-    } catch {
-      // statistik belaka
-    }
+    await presenceUpsert(d1, id, now);
   }
-  let count = 0;
-  try {
-    const row = await d1
-      .prepare("SELECT COUNT(*) AS n FROM web_presence WHERE seen_at > ?")
-      .bind(now - PRESENCE_WINDOW_MS)
-      .first();
-    count = Number(row?.n) || 0;
-  } catch {
-    count = 0;
-  }
+  const count = await presenceCount(d1, now);
   return jsonResponse(
     { status: "ok", active_session_count: count, checked_at: checkedAt },
     200,
     request.method,
+    { "cache-control": "public, max-age=15" },
   );
 }
 
@@ -1730,7 +1803,6 @@ export default {
       path === "/api/push-update" ||
       path === "/api/chat/push-relay" ||
       path === "/api/chat/translate" ||
-      path === "/api/session" ||
       path.startsWith("/api/jokes") ||
       path.startsWith("/api/feedback")
     ) {
@@ -1921,6 +1993,10 @@ export default {
     }
     if (path === "/api/active-sessions") {
       return activeSessionsResponse(request, env);
+    }
+    if (path === "/api/session") {
+      if (request.method !== "POST") return methodNotAllowed("POST");
+      return sessionReportResponse(request, env);
     }
     if (request.method !== "GET" && request.method !== "HEAD") return methodNotAllowed();
 
