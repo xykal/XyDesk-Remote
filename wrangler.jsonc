@@ -4,9 +4,6 @@
   "main": "./cloudflare/worker.mjs",
   "compatibility_date": "2026-10-03",
   "workers_dev": false,
-  "vars": {
-    "ONESIGNAL_APP_ID": "e3d5adea-1c0f-4986-9ce5-e088d65f0998"
-  },
   "routes": [
     {
       "pattern": "xydeskremote.biz.id",
@@ -63,13 +60,6 @@
     {
       "tag": "v4",
       "new_sqlite_classes": [
-        "FeedbackBoard"
-      ]
-    },
-    {
-      "tag": "v5",
-      "deleted_classes": [
-        "ActiveSessions",
         "FeedbackBoard"
       ]
     }
