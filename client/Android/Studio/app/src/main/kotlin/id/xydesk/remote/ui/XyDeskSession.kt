@@ -397,7 +397,6 @@ fun XyDeskSessionScreen(
     // Notifikasi koneksi putus tak terduga (backlog 2026-10-15): saat sesi
     // yang tadinya tersambung mati sendiri (bukan user disconnect, bukan
     // sedang retry/ubah-resolusi) DAN app sedang di background, kasih tahu
-    val sessionLifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
 
 
 
