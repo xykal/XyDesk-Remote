@@ -752,8 +752,8 @@ fun XyDeskHome(
         ) {
             Text(
                 xy(
-                    "Salin JSON di bawah untuk mencadangkan seluruh daftar Koneksi PC & Koneksi RDP Anda, atau tempel JSON cadangan lalu ketuk Pulihkan.",
-                    "Copy the JSON below to back up all your PC Connect & RDP profiles, or paste a backup JSON and tap Restore.",
+                    "Salin JSON di bawah untuk mencadangkan seluruh daftar perangkat Anda, atau tempel JSON cadangan lalu ketuk Pulihkan.",
+                    "Copy the JSON below to back up all your device profiles, or paste a backup JSON and tap Restore.",
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1369,11 +1369,9 @@ private fun DevicesScreen(
 ) {
     val context = LocalContext.current
     var searchQuery by remember { mutableStateOf("") }
-    var modeFilterIndex by remember { mutableStateOf(0) } // 0 = Semua, 1 = Koneksi PC, 2 = Koneksi RDP
     val devicesPrefs = remember { AppPrefs(context) }
     var bigCards by remember { mutableStateOf(devicesPrefs.deviceGridMode) }
     var showAddBubble by remember { mutableStateOf(false) }
-    var showPcConnectionNotice by remember { mutableStateOf(true) }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
@@ -1383,14 +1381,6 @@ private fun DevicesScreen(
                     onClick = onDismissSharedNotice,
                     container = MaterialTheme.colorScheme.primaryContainer,
                     content = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-            }
-            if (showPcConnectionNotice) {
-                Banner(
-                    text = xy("PC Stream menggantikan Koneksi PC lama. RDP tetap tersedia.", "PC Stream replaces legacy PC Connect. RDP remains available."),
-                    onClick = { showPcConnectionNotice = false },
-                    container = MaterialTheme.colorScheme.secondaryContainer,
-                    content = MaterialTheme.colorScheme.onSecondaryContainer,
                 )
             }
             if (crashLog != null) {
@@ -1422,40 +1412,10 @@ private fun DevicesScreen(
                 )
             }
 
-            val inAppUnread by XyInAppNotificationBus.unreadCount.collectAsState()
-            val inAppHistory by XyInAppNotificationBus.history.collectAsState()
             XyTopBar(
                 title = xy("Perangkat", "Devices"),
                 onBack = null,
                 actions = {
-                    // Tombol Lonceng Pusat Notifikasi Dalam Aplikasi (In-App Notification Center)
-                    Box(contentAlignment = Alignment.TopEnd) {
-                        XyIconPill(
-                            XyIcons.Bell,
-                            { XyInAppNotificationBus.openInbox() },
-                            active = inAppUnread > 0,
-                            flat = true,
-                            contentDescription = xy("Notifikasi Dalam Aplikasi", "In-App Notifications"),
-                        )
-                        val badgeCount = if (inAppUnread > 0) inAppUnread else inAppHistory.size
-                        if (badgeCount > 0) {
-                            Box(
-                                modifier = Modifier
-                                    .padding(top = 2.dp, end = 2.dp)
-                                    .clip(RoundedCornerShape(50))
-                                    .background(if (inAppUnread > 0) Color(0xFF6F6F6F) else Color(0xFF9C9C9C))
-                                    .padding(horizontal = 4.5.dp, vertical = 1.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    text = if (badgeCount > 99) "99+" else "$badgeCount",
-                                    fontSize = 8.5.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = Color.White,
-                                )
-                            }
-                        }
-                    }
                     XyIconPill(
                         XyIcons.Grid,
                         {
@@ -1502,20 +1462,13 @@ private fun DevicesScreen(
                     }
                 }
             } else {
-                val filteredFavorites = remember(favorites, searchQuery, modeFilterIndex) {
+                val filteredFavorites = remember(favorites, searchQuery) {
                     val q = searchQuery.trim().lowercase()
                     favorites.filter { p ->
-                        val isPc = RdpOptions.of(context, p.id).pcConnectMode
-                        val modeOk = when (modeFilterIndex) {
-                            1 -> isPc
-                            2 -> !isPc
-                            else -> true
-                        }
-                        val queryOk = q.isEmpty() ||
+                        q.isEmpty() ||
                             p.label.orEmpty().lowercase().contains(q) ||
                             p.host.lowercase().contains(q) ||
                             p.username.orEmpty().lowercase().contains(q)
-                        modeOk && queryOk
                     }
                 }
 
@@ -1528,18 +1481,6 @@ private fun DevicesScreen(
                     item {
                         HomeRdpFreeBannerCard(
                             onCreateRdp = onCreateRdp,
-                        )
-                    }
-                    item {
-                        XySegmented(
-                            options = listOf(
-                                xy("Semua ({0})", "All ({0})", favorites.size),
-                                xy("Koneksi PC", "PC Connect"),
-                                xy("Koneksi RDP", "RDP Session"),
-                            ),
-                            selectedIndex = modeFilterIndex,
-                            onSelect = { modeFilterIndex = it },
-                            modifier = Modifier.fillMaxWidth(),
                         )
                     }
                     if (favorites.size >= 2) {
@@ -1565,7 +1506,6 @@ private fun DevicesScreen(
                                 actionText = xy("Reset Filter", "Reset Filter"),
                                 onAction = {
                                     searchQuery = ""
-                                    modeFilterIndex = 0
                                 },
                             )
                         }
@@ -1721,21 +1661,11 @@ private fun DeviceCard(
     }
     val shape = RoundedCornerShape(if (compact) 18.dp else 24.dp)
     // Baris keterangan dipakai kartu grid (overlay) dan list (compact).
-    val detailLine = if (rdpOptions.pcConnectMode) {
-        buildString {
-            append(xy("Koneksi PC", "Connect PC"))
-            append("  ·  ")
-            append(profile.host)
-            append("  ·  ")
-            append(rdpOptions.activeCodecLabel())
-        }
-    } else {
-        buildString {
-            append(profile.host).append(':').append(profile.port)
-            if (!profile.username.isNullOrBlank()) append("  ·  ").append(profile.username)
-            append("  ·  ").append(streamBadge)
-            if (rdpOptions.consoleAdmin) append("  ·  Admin")
-        }
+    val detailLine = buildString {
+        append(profile.host).append(':').append(profile.port)
+        if (!profile.username.isNullOrBlank()) append("  ·  ").append(profile.username)
+        append("  ·  ").append(streamBadge)
+        if (rdpOptions.consoleAdmin) append("  ·  Admin")
     }
     if (compact) {
         // Mode list (permintaan pemilik): bar ramping — preview kecil di kiri,
