@@ -30,9 +30,9 @@ import id.xydesk.remote.ui.AppPrefs
 // =============================================================
 // XyDesk design tokens.
 //
-// Aturan: permukaan matte gelap netral dan rounded, aksen ungu untuk
+// Aturan: permukaan matte gelap netral dan rounded, aksen monokrom untuk
 // primary/kontrol aktif, kontras tinggi, tanpa glow/gradient dekoratif.
-// Warna status (ok/warn/danger) tetap abu netral.
+// Warna status (ok/warn/danger) memakai hue lembut agar tetap kebaca.
 // Garis dekoratif dibuat lembut; input, slider, dan switch tetap jelas terbaca.
 // =============================================================
 
@@ -49,12 +49,13 @@ val XyText = Color(0xFFF3F3F5)
 val XyTextDim = Color(0xFFB2B2B8)
 val XyTextFaint = Color(0xFF808086)
 // Aksen monokrom (permintaan pemilik 1.1.24): primary kembali hitam-putih
-// di semua layar; permukaan tetap netral dan status tetap abu netral.
+// di semua layar; permukaan tetap netral. Status diberi hue lembut supaya
+// pesan ok/warning/error mudah dikenali (permintaan pemilik 2.0.0).
 val XyAccent = Color(0xFFF4F4F5)
 val XyAccentInk = Color(0xFF0A0A0C)
-val XyOk = Color(0xFFE2E2E6)
-val XyWarn = Color(0xFFAAAAAA)
-val XyDanger = Color(0xFF858585)
+val XyOk = Color(0xFF9CCBA6)
+val XyWarn = Color(0xFFE0BF7A)
+val XyDanger = Color(0xFFE08A8A)
 
 val DarkScheme = darkColorScheme(
     primary = XyAccent,

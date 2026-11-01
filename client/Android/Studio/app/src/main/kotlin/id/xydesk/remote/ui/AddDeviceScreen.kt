@@ -120,12 +120,10 @@ fun AddDeviceScreen(
     val existingStored = remember(deviceId, existing) {
         if (existing != null) RdpOptions.of(context, deviceId) else null
     }
-    var isPcQuickMode by remember(existing, initialPcQuickMode) {
-        mutableStateOf(
-            if (existing != null) existingStored?.pcConnectMode == true
-            else initialPcQuickMode,
-        )
-    }
+    // Mode PC Connect (Direct Stream) dihapus di 2.0.0 (RDP-only). Seluruh
+    // cabang isPcQuickMode dipaksa ke jalur RDP; profil lama otomatis kembali
+    // menjadi profil RDP saat disimpan ulang.
+    val isPcQuickMode = false
 
     // "Setelan cepat" menyembunyikan bagian lanjutan supaya layar tidak panjang
     // dan tidak perlu scroll jauh saat cuma mau konek.
@@ -638,32 +636,6 @@ fun AddDeviceScreen(
                     )
                 }
             }
-            if (existing == null) {
-                XySegmented(
-                    options = listOf(
-                        xy("Koneksi RDP (Desktop / Server)", "RDP Session (Desktop / Server)"),
-                        xy("Koneksi PC (Direct Stream)", "PC Connect (Direct Stream)"),
-                    ),
-                    selectedIndex = if (isPcQuickMode) 1 else 0,
-                    onSelect = { idx ->
-                        val wantPc = idx == 1
-                        isPcQuickMode = wantPc
-                        if (wantPc) {
-                            options = options.withPcStreamEngine(options.pcStreamEngine)
-                        } else {
-                            options = options.withStreamProfile(XyStreamProfile.AUTO).copy(
-                                pcConnectMode = false,
-                                microphone = true,
-                                gpuProfile = XyGpuProfile.AUTO,
-                                dynamicResolution = true,
-                                consoleAdmin = false,
-                            )
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-
             XySectionLabel(
                 if (isPcQuickMode) xy("Identitas PC · Direct Stream 1:1 (Tanpa Akun RDP)", "PC Identity · 1:1 Direct Stream (No RDP Account)")
                 else xy("Alamat Host / Server RDP", "RDP Host / Server Address")
