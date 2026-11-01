@@ -243,6 +243,27 @@ fun XyDeskSessionScreen(
     val stage by manager.stage.collectAsState(initial = SessionManager.Stage.IDLE)
     val telemetry by manager.telemetry.collectAsState(initial = TelemetrySample.EMPTY)
 
+    // Hitungan pengguna online anonim — aktif default, bisa dimatikan di setelan
+    // privasi. Hanya UUID acak per sesi yang dikirim; heartbeat tiap 60 detik.
+    LaunchedEffect(state is SessionState.Connected, profile.id) {
+        if (state !is SessionState.Connected) return@LaunchedEffect
+        if (!appPrefs.shareActiveSessionStats) return@LaunchedEffect
+        val statsSessionId = java.util.UUID.randomUUID()
+        try {
+            while (isActive && manager.state.value is SessionState.Connected && appPrefs.shareActiveSessionStats) {
+                withContext(Dispatchers.IO) {
+                    id.xydesk.remote.privacy.ActiveSessionStatsReporter.heartbeat(statsSessionId)
+                }
+                runCatching { id.xydesk.remote.ui.AppUpdate.refreshOnlineCount(context) }
+                delay(8_000L)
+            }
+        } finally {
+            withContext(NonCancellable + Dispatchers.IO) {
+                id.xydesk.remote.privacy.ActiveSessionStatsReporter.end(statsSessionId)
+            }
+        }
+    }
+
     LaunchedEffect(state is SessionState.Connected, remoteRecorder) {
         if (state !is SessionState.Connected) remoteRecorder.stop()
     }
