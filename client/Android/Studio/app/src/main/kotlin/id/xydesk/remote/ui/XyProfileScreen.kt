@@ -72,7 +72,6 @@ internal fun XyProfileScreen(
     appPrefs: AppPrefs,
     deviceCount: Int,
     onShowLog: () -> Unit,
-    onOpenFeedback: () -> Unit,
 ) {
     val context = LocalContext.current
     val profileScope = androidx.compose.runtime.rememberCoroutineScope()
@@ -180,11 +179,6 @@ internal fun XyProfileScreen(
                 icon = XyIcons.Terminal,
                 title = xy("Log koneksi", "Connection log"),
                 onClick = onShowLog,
-            )
-            XyGlassRow(
-                icon = XyIcons.Heart,
-                title = xy("Masukan & saran", "Feedback & suggestions"),
-                onClick = onOpenFeedback,
             )
             XyGlassRow(
                 icon = XyIcons.Refresh,

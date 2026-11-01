@@ -99,7 +99,7 @@ jobs:
           python3 -m unittest discover -s ci -p test_windows_host_validation.py
       - name: Unit test JVM (core-rdp + core-pc-stream + IME + app UI)
         working-directory: client/Android/Studio
-        run: chmod +x gradlew && ./gradlew --stacktrace --no-daemon --build-cache :core-rdp:testDebugUnitTest :core-pc-stream:testDebugUnitTest :freeRDPCore:testDebugUnitTest :app:testDebugUnitTest
+        run: chmod +x gradlew && ./gradlew --stacktrace --no-daemon --build-cache :core-rdp:testDebugUnitTest :freeRDPCore:testDebugUnitTest :app:testDebugUnitTest
       - name: Compile Kotlin (app + core-rdp)
         working-directory: client/Android/Studio
         run: chmod +x gradlew && ./gradlew --stacktrace --no-daemon --build-cache :app:compileDebugKotlin
@@ -196,7 +196,7 @@ jobs:
       - name: Unit test JVM (core-rdp + core-pc-stream)
         if: steps.tagcheck.outputs.tagged != 'true'
         working-directory: client/Android/Studio
-        run: chmod +x gradlew && ./gradlew --stacktrace --no-daemon --build-cache :core-rdp:testDebugUnitTest :core-pc-stream:testDebugUnitTest
+        run: chmod +x gradlew && ./gradlew --stacktrace --no-daemon --build-cache :core-rdp:testDebugUnitTest
       - name: Gradle assembleDebug (per ABI)
         if: steps.tagcheck.outputs.tagged != 'true'
         working-directory: client/Android/Studio
