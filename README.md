@@ -89,6 +89,20 @@ redirection audio bawaan RDP:
 
 Catatan: butuh profil RDP standar; kualitas mikrofon mengikuti jaringan.
 
+## Catatan risiko XyRdp (RDP Cloud)
+
+Fitur **XyRdp Cloud** membuat mesin RDP di GitHub Actions memakai **akun GitHub
+kamu sendiri**. Sebelum memakainya, tahu risikonya:
+
+- **Kebijakan GitHub** — runner Actions dipakai sebagai mesin interaktif bisa
+  ditandai sebagai penyalahgunaan; yang menanggung risiko akun kamu sendiri.
+- **Kuota Actions** — runner Windows dihitung **menit x2**; satu sesi 6 jam
+  memakai ±720 menit kuota (paket gratis ±2.000 menit/bulan).
+- **Akses** — pakai jalur **Tailscale** bila bisa; jalur Portmap/Railway
+  mengekspos RDP ke internet (pastikan password kuat).
+
+Gunakan sebagai fitur eksperimental, bukan server produksi.
+
 ---
 
 ## Kalau tidak bisa tersambung
