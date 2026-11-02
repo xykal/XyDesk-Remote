@@ -2,58 +2,64 @@
  "service": "xydesk-remote",
  "brand": "XyVerse Technology Global",
  "release_state": "published",
- "release_tag": "v1.1.23",
- "source_commit": "5bdfa34",
- "published_at": "2026-10-23T11:48:35Z",
- "release_updated_at": "2026-10-23T11:48:35Z",
- "release_url": "https://github.com/xykal/XyDesk-Remote/releases/tag/v1.1.23",
+ "release_tag": "v2.0.1",
+ "source_commit": "c7c014d",
+ "published_at": "2026-11-02T09:57:35Z",
+ "release_updated_at": "2026-11-02T09:57:35Z",
+ "release_url": "https://github.com/xykal/XyDesk-Remote/releases/tag/v2.0.1",
  "app_build": {
-  "version": "1.1.23",
-  "version_code": 88
+  "version": "2.0.1",
+  "version_code": 95
  },
  "ci": {
   "workflow": "Build APK",
   "status": "completed",
   "conclusion": "success",
-  "result_scope": "Aset v1.1.23 Build 88 (APK per-ABI + universal + host agent + SHA256SUMS + SIGNATURE-VERIFICATION) dibangun CI 39945860177 dari tag v1.1.23, signing v1+v2+v3",
-  "url": "https://github.com/xykal/XyDesk-Remote/actions/runs/39945860177"
+  "result_scope": "Aset v2.0.1 Build 95 (APK per-ABI + universal + host agent + XyDeskRemote.exe + SHA256SUMS + SIGNATURE-VERIFICATION) dibangun CI 41359325708 dari tag v2.0.1, signing v1+v2+v3",
+  "url": "https://github.com/xykal/XyDesk-Remote/actions/runs/41359325708"
  },
  "downloads": [
   {
    "abi": "arm64-v8a",
    "file": "XyDesk-Remote64bit.apk",
-   "size_bytes": 100793458,
-   "sha256": "940261cd4102efe0c62e126521c84aeaff47f3bc50a9ae724f6e633640f5489d",
-   "url": "https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.23/XyDesk-Remote64bit.apk"
+   "size_bytes": 87208784,
+   "sha256": "25e2099891403e4f3eae920179440f14b8176d5280812917833948f4ad6842ec",
+   "url": "https://github.com/xykal/XyDesk-Remote/releases/download/v2.0.1/XyDesk-Remote64bit.apk"
   },
   {
    "abi": "armeabi-v7a",
    "file": "XyDesk-Remote32bit.apk",
-   "size_bytes": 81304750,
-   "sha256": "6f104735ffcc12e6ed8d6a81e829d13a2c9c6925a0d2762a18a3619161775c86",
-   "url": "https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.23/XyDesk-Remote32bit.apk"
+   "size_bytes": 73188234,
+   "sha256": "0be83c42c9c8001e8b62b2a11a2dad842b97e4b0aee76e95b009921b8210d673",
+   "url": "https://github.com/xykal/XyDesk-Remote/releases/download/v2.0.1/XyDesk-Remote32bit.apk"
   },
   {
    "abi": "x86_64",
    "file": "XyDesk-Remote64bit-x86.apk",
-   "size_bytes": 110058520,
-   "sha256": "a83f6f221b411ecd306f27a1aa5e45c41eb4ace79b0d1b3aaf9579567e8a3953",
-   "url": "https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.23/XyDesk-Remote64bit-x86.apk"
+   "size_bytes": 92590841,
+   "sha256": "7afe29127e051c005377077aa4d422a8f11536bc377fab9d83fd325b60da1030",
+   "url": "https://github.com/xykal/XyDesk-Remote/releases/download/v2.0.1/XyDesk-Remote64bit-x86.apk"
   },
   {
    "file": "XyDesk-RemoteUniversal.apk",
-   "size_bytes": 291405489,
-   "sha256": "42274c628c0c92043248b6a7f4c81cb99775d8e94638b8976663c4ca77d0ff2f",
-   "url": "https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.23/XyDesk-RemoteUniversal.apk"
+   "size_bytes": 242005128,
+   "sha256": "cc3fe77f598c5861fc1e96d36bee24ea1551afb2dcb13cfe00da27b6e68dd661",
+   "url": "https://github.com/xykal/XyDesk-Remote/releases/download/v2.0.1/XyDesk-RemoteUniversal.apk"
   },
   {
    "file": "XyDesk-Remote-Host-Agent-win64.zip",
-   "size_bytes": 579558,
-   "sha256": "5acc77fb14ca9a9656e7f74fa08f4b93a988c26deb0387fd12a9dc912feab8d0",
-   "url": "https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.23/XyDesk-Remote-Host-Agent-win64.zip"
+   "size_bytes": 580559,
+   "sha256": "d5612e17ce645a70088810dfe6129ff84e9a9609fe25a04a61316af1e71d7146",
+   "url": "https://github.com/xykal/XyDesk-Remote/releases/download/v2.0.1/XyDesk-Remote-Host-Agent-win64.zip"
+  },
+  {
+   "file": "XyDeskRemote.exe",
+   "size_bytes": 1522481,
+   "sha256": "325837e7a5d66c7efd38867eb423c2334adf5d1a5b1a2c248da28979796a28b1",
+   "url": "https://github.com/xykal/XyDesk-Remote/releases/download/v2.0.1/XyDeskRemote.exe"
   }
  ],
- "checksums_url": "https://github.com/xykal/XyDesk-Remote/releases/download/v1.1.23/SHA256SUMS.txt",
+ "checksums_url": "https://github.com/xykal/XyDesk-Remote/releases/download/v2.0.1/SHA256SUMS.txt",
  "signing": {
   "apk_signature_schemes": [
    "v1",
