@@ -62,7 +62,7 @@ fun TouchGamepadOverlay(controller: SessionSurfaceController, enabled: Boolean) 
     var padAlpha by rememberSaveable { mutableFloatStateOf(0.62f) }
 
     val send = remember(controller) {
-        { action: Int, code: Int -> controller.onKeyEvent(KeyEvent(action, code)) }
+        { action: Int, code: Int -> controller.onKeyEvent(KeyEvent(action, code)); Unit }
     }
     val keys = remember(controller) { PadKeys(send) }
 
