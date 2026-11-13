@@ -1541,3 +1541,8 @@ Tiga permintaan pemilik ditangani tuntas:
   - Chrome Custom Tabs + deep link `xydesk://github-auth` + polling `/api/github/oauth/poll`, serta pemisahan `--setup-only` / `--keepalive-only` / `--finalize-only` di `setup-linux-rdp.sh` agar tidak stuck di step setup dan bisa memilih **Windows Server 2022 RDP / Linux Desktop / Linux SSH** secara akurat.
 
 
+
+## 2026-11-13 — XyShield gate: hapus false-positive stack-scan + info versi
+- Bukti sidik tangan APK rilis v2.0.1 (XyDesk-Remote32bit.apk) diverifikasi independen dari blok tanda tangan v1 (META-INF/XYDESK-R.RSA): SHA-256 sertifikat = 8429f689e7c3c6a0a44cb924206d56d5a2dccbd6c88cb900835c1901ad219652 = `SignerMark.MARK` (COCOK). Pembanding sign-extension sudah benar sejak `ca70d1e` (2026-10-09) dan masuk semua tag rilis kecuali v1.0.2. Dengan demikian gate "DETEKSI MODIFIKASI / CRACK" tidak seharusnya muncul pada instalasi resmi v1.1.8+; laporan pengguna berasal dari build pra-`ca70d1e` yang masih terpasang, APK hasil repack, atau false-positive deteksi hook.
+- Perubahan kode di `AppChannel.kt`: (1) hapus pemindaian `Throwable().stackTrace` berbasis substring di `detectHookFramework()` — vektor false-positive; kelas hook pasti tetap dicek via `Class.forName`. (2) `SecurityAuditReport` + audit + ringkasan diagnostik + baris gate kini memuat **Versi Terpasang** (versionName + versionCode) supaya pengguna build lama tahu jalur update.
+- Uji lokal: tidak ada (gradlew tidak berjalan di sandbox); verifikasi sintaks lewat CI Kotlin syntax guard + build APK via Actions.
