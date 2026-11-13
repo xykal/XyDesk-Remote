@@ -1517,6 +1517,27 @@ let EDGE_FALLBACK_JOKES_INSTANCE = null;
 let EDGE_FALLBACK_FEEDBACK_INSTANCE = null;
 const DEFAULT_ONESIGNAL_APP_ID = "e3d5adea-1c0f-4986-9ce5-e088d65f0998";
 
+/** Header keamanan standar untuk semua respons statis/web. */
+function withSecurityHeaders(res) {
+  const out = new Response(res.body, res);
+  out.headers.set("X-Content-Type-Options", "nosniff");
+  out.headers.set("X-Frame-Options", "SAMEORIGIN");
+  out.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  out.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  out.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  const ct = out.headers.get("Content-Type") || "";
+  if (ct.includes("text/html")) {
+    out.headers.set("Content-Security-Policy",
+      "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " +
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+      "font-src 'self' data: https://fonts.gstatic.com; " +
+      "img-src 'self' data: blob: https:; " +
+      "connect-src 'self' https://*.xydeskremote.biz.id wss://*.xydeskremote.biz.id https://api.github.com; " +
+      "frame-ancestors 'self'; base-uri 'self'; object-src 'none'");
+  }
+  return out;
+}
+
 function normalizeCountryCode(raw, fallback = "ID") {
   const code = String(raw || "").trim().toUpperCase();
   if (/^[A-Z]{2}$/.test(code) && code !== "XX" && code !== "T1") return code;
@@ -2038,7 +2059,8 @@ export default {
     const host = url.hostname.toLowerCase();
     if ((host === "report.xydeskremote.biz.id" || host === "ask.xydeskremote.biz.id") &&
         (path === "/" || path === "/index.html")) {
-      return env.ASSETS.fetch(new Request(new URL("/feedback.html", request.url), request));
+      const fbRes = await env.ASSETS.fetch(new Request(new URL("/feedback.html", request.url), request));
+      return withSecurityHeaders(fbRes);
     }
 
     // Domain khusus API & Signaling (api/wss/cpc): TIDAK BOLEH merender halaman web utama!
@@ -2063,6 +2085,7 @@ export default {
       return Response.redirect(`https://www.xydeskremote.biz.id${url.pathname}${url.search}`, 301);
     }
 
-    return env.ASSETS.fetch(request);
+    const assetRes = await env.ASSETS.fetch(request);
+    return withSecurityHeaders(assetRes);
   },
 };
