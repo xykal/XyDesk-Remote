@@ -1119,7 +1119,7 @@ async function dataPackResponse(request, env) {
       updated_at: new Date().toISOString(),
       e2ee_protocol: "XY-E2EE-GCM-v1",
       rdp_runners: [
-        { id: "windows-2022", label: "Windows Server 2022 (Stabil · GTA SA-MP & Minecraft)", family: "windows" },
+        { id: "windows-2022", label: "Windows Server 2022 (Stabil · Desktop & Studio 3D)", family: "windows" },
         { id: "windows-2025", label: "Windows Server 2025 (Kernel Terbaru)", family: "windows" },
         { id: "windows-latest", label: "Windows Latest (Default GitHub)", family: "windows" },
         { id: "ubuntu-24.04", label: "Ubuntu 24.04 LTS Desktop (XFCE4 + XRDP :3389)", family: "linux" },

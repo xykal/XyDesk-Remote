@@ -93,18 +93,21 @@ internal object SessionFileTransfer {
             fail(xyn("Folder bersama tidak bisa ditulis.", "The shared folder is not writable."))
             return@withContext 0
         }
+        // Fitur transfer (13 Nov 2026): impor dari HP selalu masuk ke folder
+        // "Download" di folder bersama -> di PC tampil sebagai XyDesk:\Download\
+        val inbox = java.io.File(root.dir, "Download").apply { mkdirs() }
         var done = 0
         uris.forEach { uri ->
             val info = queryFileInfo(context, uri)
             val wanted = FileTransferPlan.sanitizeFileName(info.first, System.currentTimeMillis())
-            val existing = root.dir.listFiles()?.map { it.name }.orEmpty()
+            val existing = inbox.listFiles()?.map { it.name }.orEmpty()
             val name = FileTransferPlan.uniqueName(existing, wanted)
             val job = addJob(name, info.second, TransferDirection.TO_PC)
             val ok = runCatching {
                 val input = context.contentResolver.openInputStream(uri)
                     ?: error("no input stream")
                 input.use { source ->
-                    File(root.dir, name).outputStream().use { target ->
+                    File(inbox, name).outputStream().use { target ->
                         copyWithProgress(job.id, source, target)
                     }
                 }
@@ -114,7 +117,7 @@ internal object SessionFileTransfer {
                 done++
             }.onFailure { error ->
                 ConnectionLog.addThrowable("SES: transfer ke PC gagal ($name)", error)
-                runCatching { File(root.dir, name).delete() }
+                runCatching { File(inbox, name).delete() }
                 update(job.id) {
                     it.copy(
                         phase = TransferPhase.FAILED,

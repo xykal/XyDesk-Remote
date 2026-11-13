@@ -136,18 +136,14 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
     var xydeskBoost by remember { mutableStateOf(prefs.getString("xydesk", "ya") != "tidak") }
     var microphone by remember { mutableStateOf(prefs.getString("microphone", "ya") != "tidak") }
     var storageBoost by remember { mutableStateOf(prefs.getString("storage_boost", "ya") != "tidak") }
-    var sampDeps by remember { mutableStateOf(prefs.getString("samp", "ya") != "tidak") }
-    // 1.1.28: tiga fitur yang sebelumnya tidak pernah benar-benar dikirim ke
-    // workflow (atau malah tidak ada input-nya sama sekali di rdp-6h.yml).
+    // Fitur game (SA-MP/GTA, Roblox, Minecraft, MuMu) dihapus 2026-11-13 —
+    // tidak stabil dan membuat runtime lambat (arahan pemilik).
     var fpsBoost by remember { mutableStateOf(prefs.getString("fps_boost", "ya") != "tidak") }
-    var mumuPlayer by remember { mutableStateOf(prefs.getString("mumu", "tidak") == "ya") }
-    var sampAntiBan by remember { mutableStateOf(prefs.getString("samp_antiban", "tidak") == "ya") }
     var win10Theme by remember { mutableStateOf(prefs.getString("win10", "ya") != "tidak") }
     var ekstraDesktop by remember { mutableStateOf(prefs.getString("ekstra", "ya") != "tidak") }
-    var robloxReady by remember { mutableStateOf(prefs.getString("roblox", "tidak") == "ya") }
-    var discordReady by remember { mutableStateOf(prefs.getString("discord", "tidak") == "ya") }
-    var mcJavaReady by remember { mutableStateOf(prefs.getString("minecraft_java", "tidak") == "ya") }
-    var mcBedrockReady by remember { mutableStateOf(prefs.getString("minecraft_bedrock", "tidak") == "ya") }
+    var studioTools by remember { mutableStateOf(prefs.getString("studio_tools", "ya") != "tidak") }
+    var macLauncher by remember { mutableStateOf(prefs.getString("mac_launcher", "tidak") == "ya") }
+    var devTools by remember { mutableStateOf(prefs.getString("devtools", "tidak") == "ya") }
 
     // Secret configuration & password vault lokal
     var password by remember {
@@ -221,16 +217,12 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
             .putString("xydesk", if (xydeskBoost) "ya" else "tidak")
             .putString("microphone", if (microphone) "ya" else "tidak")
             .putString("storage_boost", if (storageBoost) "ya" else "tidak")
-            .putString("samp", if (sampDeps) "ya" else "tidak")
             .putString("fps_boost", if (fpsBoost) "ya" else "tidak")
-            .putString("mumu", if (mumuPlayer) "ya" else "tidak")
-            .putString("samp_antiban", if (sampAntiBan) "ya" else "tidak")
             .putString("win10", if (win10Theme) "ya" else "tidak")
             .putString("ekstra", if (ekstraDesktop) "ya" else "tidak")
-            .putString("roblox", if (robloxReady) "ya" else "tidak")
-            .putString("discord", if (discordReady) "ya" else "tidak")
-            .putString("minecraft_java", if (mcJavaReady) "ya" else "tidak")
-            .putString("minecraft_bedrock", if (mcBedrockReady) "ya" else "tidak")
+            .putString("studio_tools", if (studioTools) "ya" else "tidak")
+            .putString("mac_launcher", if (macLauncher) "ya" else "tidak")
+            .putString("devtools", if (devTools) "ya" else "tidak")
             .putBoolean("remember_rdp_pass", rememberPasswordLocal)
             .apply()
         if (rememberPasswordLocal && password.isNotBlank()) {
@@ -350,19 +342,17 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
         put("akses", akses)
         put("storage_boost", if (storageBoost) "ya" else "tidak")
         put("debloat", debloat)
-        put("samp", if (sampDeps) "ya" else "tidak")
-        put("samp_antiban", if (sampAntiBan) "ya" else "tidak")
         put("fps_boost", if (fpsBoost) "ya" else "tidak")
-        put("mumu", if (mumuPlayer) "ya" else "tidak")
         put("win10", if (win10Theme) "ya" else "tidak")
         put("xydesk", if (xydeskBoost) "ya" else "tidak")
         put("ekstra", if (ekstraDesktop) "ya" else "tidak")
+        // Input baru dikirim hanya saat menyimpang dari default supaya repo
+        // fork lama yang belum tersinkron tidak menolak dispatch dengan 422.
+        if (!studioTools) put("studio_tools", "tidak")
+        if (macLauncher) put("mac_launcher", "ya")
+        if (devTools) put("devtools", "ya")
         put("grafis", grafis)
         put("microphone", if (microphone) "ya" else "tidak")
-        put("roblox", if (robloxReady) "ya" else "tidak")
-        put("discord", if (discordReady) "ya" else "tidak")
-        put("minecraft_java", if (mcJavaReady) "ya" else "tidak")
-        put("minecraft_bedrock", if (mcBedrockReady) "ya" else "tidak")
         put("perpanjang_otomatis", if (autoRenew) "ya" else "tidak")
         // workflow hanya punya portmap_host/portmap_port — nama
         // railway_host/railway_port dulu tidak pernah dikenal GitHub (422).
@@ -415,28 +405,6 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                             refreshAll(tok, user)
                         } else {
                             errorMessage = "Tidak ditemukan run aktif untuk dihentikan."
-                        }
-                    }
-                    "samp_antiban" -> {
-                        // Dulu tombol ini cuma memicu sesi 60 menit biasa dan
-                        // TIDAK pernah memanggil reset GPCI. Sekarang pakai
-                        // konfigurasi yang sama dengan tombol Mulai, plus
-                        // flag samp_antiban yang benar-benar dijalankan
-                        // scripts/setup-samp-antiban.ps1 di workflow.
-                        busyLabel = "Mengirim perintah Reset Anti-Ban SAMP & GPCI…"
-                        val inputs = sessionInputs().apply {
-                            put("samp", "ya")
-                            put("samp_antiban", "ya")
-                        }
-                        if (XyRdpClient.dispatch(tok, user, inputs)) {
-                            sampAntiBan = true
-                            saveSettings()
-                            activeTab = 0
-                            successMessage = "Reset GPCI/HWID SA-MP dikirim. Tunggu step 'Reset Anti-Ban SAMP' selesai, lalu cek out/samp-antiban.json di run Actions."
-                            delay(2500)
-                            refreshAll(tok, user)
-                        } else {
-                            errorMessage = "Gagal mengirim workflow anti-ban. Pastikan secret RDP_PASSWORD sudah terpasang."
                         }
                     }
                     "logout" -> {
@@ -1354,7 +1322,6 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                                 text = when (confirmAction) {
                                                     "start" -> "Mulai sesi RDP baru ($runnerImage · ${duration}m · $akses)?"
                                                     "stop" -> "Hentikan sesi RDP yang sedang berjalan?"
-                                                    "samp_antiban" -> "Reset GPCI Serial & HWID SA-MP ke identitas baru (anti-ban)?"
                                                     else -> "Keluar dari akun GitHub @$login?"
                                                 },
                                                 style = MaterialTheme.typography.bodySmall,
@@ -1386,11 +1353,17 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                     } else {
                                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                             XyPillButton(
-                                                text = if (isRunningOrQueued) "Sesi Aktif" else "Mulai (${duration}m)",
+                                                text = if (isRunningOrQueued) "Lihat Status RDP" else "Buat RDP (${duration}m)",
                                                 icon = XyIcons.Play,
-                                                onClick = { confirmAction = "start" },
+                                                onClick = {
+                                                    if (isRunningOrQueued) {
+                                                        activeTab = 0
+                                                    } else {
+                                                        confirmAction = "start"
+                                                    }
+                                                },
                                                 primary = true,
-                                                enabled = !busy && !isRunningOrQueued,
+                                                enabled = !busy,
                                                 modifier = Modifier.weight(1.25f),
                                             )
                                             XyPillButton(
@@ -1679,13 +1652,11 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                                 microphone = true
                                                 storageBoost = false
                                                 debloat = "tidak"
-                                                sampDeps = false
                                                 win10Theme = false
                                                 ekstraDesktop = false
+                                                studioTools = false
+                                                macLauncher = false
                                                 grafis = "tidak"
-                                                robloxReady = false
-                                                mcJavaReady = false
-                                                mcBedrockReady = false
                                                 saveSettings()
                                                 successMessage = "Preset Boot Kilat diterapkan."
                                             },
@@ -1694,18 +1665,17 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                             modifier = Modifier.weight(1f),
                                         )
                                         XyPillButton(
-                                            text = if (isLinuxRunner) "Preset Linux Lengkap" else "Preset Game Lengkap",
+                                            text = if (isLinuxRunner) "Preset Linux Lengkap" else "Preset Lengkap",
                                             onClick = {
                                                 autoRenew = true
                                                 xydeskBoost = true
                                                 microphone = true
                                                 storageBoost = true
                                                 debloat = "ringan"
-                                                sampDeps = !isLinuxRunner
                                                 win10Theme = !isLinuxRunner
                                                 ekstraDesktop = true
+                                                studioTools = !isLinuxRunner
                                                 grafis = "software"
-                                                mcJavaReady = !isLinuxRunner
                                                 saveSettings()
                                                 successMessage = "Preset Lengkap + Anti-Reset diterapkan."
                                             },
@@ -1769,7 +1739,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                         ) {
                                             Text("Pilih Sistem Operasi & Versi Image:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                                             listOf(
-                                                Triple("windows-2022", "desktop", "Windows Server 2022 (Stabil · GTA SA-MP & Minecraft)"),
+                                                Triple("windows-2022", "desktop", "Windows Server 2022 (Stabil · Desktop & Studio 3D)"),
                                                 Triple("windows-2025", "desktop", "Windows Server 2025 (Kernel Terbaru & Cepat)"),
                                                 Triple("ubuntu-24.04", "desktop", "Ubuntu 24.04 LTS Desktop (XFCE4 + XRDP :3389)"),
                                                 Triple("ubuntu-24.04", "polos", "Ubuntu 24.04 LTS Polos (Headless SSH :22)"),
@@ -1998,95 +1968,6 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
 
                                     Spacer(Modifier.height(10.dp))
 
-                                    // ---- Game & Emulator ----
-                                    Text(
-                                        text = "GAME & EMULATOR",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        letterSpacing = 0.8.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    Spacer(Modifier.height(4.dp))
-                                    RdpFlatToggleRow(
-                                        title = "GTA SA-MP SilentPatch (90 FPS)",
-                                        subtitle = "DirectX 9, VC++, SilentPatchSA & Widescreen Fix. GTA SA disiapkan otomatis dan disimpan antar sesi",
-                                        checked = sampDeps,
-                                        enabled = !busy,
-                                        onCheckedChange = { sampDeps = it; saveSettings() },
-                                    )
-                                    RdpFlatToggleRow(
-                                        title = "Reset GPCI / HWID SA-MP tiap sesi",
-                                        subtitle = "Anti-ban: identitas mesin baru. Tidak menjamin lolos blokir IP datacenter",
-                                        checked = sampAntiBan,
-                                        enabled = !busy,
-                                        onCheckedChange = { sampAntiBan = it; saveSettings() },
-                                    )
-                                    if (sampDeps || sampAntiBan) {
-                                        Spacer(Modifier.height(6.dp))
-                                        XyPillButton(
-                                            text = "Jalankan ulang dengan reset anti-ban",
-                                            icon = XyIcons.Refresh,
-                                            onClick = {
-                                                confirmAction = "samp_antiban"
-                                            },
-                                            primary = false,
-                                            compact = true,
-                                            modifier = Modifier.fillMaxWidth(),
-                                        )
-                                    }
-                                    RdpFlatToggleRow(
-                                        title = "Roblox Player & Studio",
-                                        subtitle = "Instalasi resmi + optimasi WARP. VM dapat ditolak anti-cheat Roblox — tanpa spoofing/bypass",
-                                        checked = robloxReady,
-                                        enabled = !busy,
-                                        onCheckedChange = { robloxReady = it; saveSettings() },
-                                    )
-                                    if (robloxReady) {
-                                        Spacer(Modifier.height(6.dp))
-                                        XyPillButton(
-                                            text = "Lihat status run di Actions ↗",
-                                            icon = XyIcons.Info,
-                                            onClick = {
-                                                // Jangan klaim "120 FPS aktif" tanpa
-                                                // bukti — buka run aslinya saja.
-                                                val runUrl = validatedSession?.run?.url
-                                                if (!runUrl.isNullOrBlank()) {
-                                                    openBrowser(runUrl)
-                                                } else {
-                                                    successMessage = "Belum ada run aktif. Mulai sesi dulu, lalu cek status di sini."
-                                                }
-                                            },
-                                            primary = false,
-                                            compact = true,
-                                            modifier = Modifier.fillMaxWidth(),
-                                        )
-                                    }
-                                    RdpFlatToggleRow(
-                                        title = "Minecraft Java + OpenGL 4.6 D3D12",
-                                        subtitle = "Temurin JDK 21 & JRE 8, PrismLauncher & anti-GLFW error 65542",
-                                        checked = mcJavaReady,
-                                        enabled = !busy,
-                                        onCheckedChange = {
-                                            mcJavaReady = it
-                                            if (it) grafis = "software"
-                                            saveSettings()
-                                        },
-                                    )
-                                    RdpFlatToggleRow(
-                                        title = "Minecraft Bedrock Launcher",
-                                        subtitle = "Pasang launcher Bedrock di sesi RDP",
-                                        checked = mcBedrockReady,
-                                        enabled = !busy,
-                                        onCheckedChange = { mcBedrockReady = it; saveSettings() },
-                                    )
-                                    RdpFlatToggleRow(
-                                        title = "MuMu Player 12 (emulator Android)",
-                                        subtitle = "Best-effort: runner GitHub biasanya tanpa VT-x, MEmu tetap jadi fallback",
-                                        checked = mumuPlayer,
-                                        enabled = !busy,
-                                        onCheckedChange = { mumuPlayer = it; saveSettings() },
-                                    )
-
                                     Spacer(Modifier.height(10.dp))
 
                                     // ---- Aplikasi & Tampilan ----
@@ -2099,18 +1980,34 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                     )
                                     Spacer(Modifier.height(4.dp))
                                     RdpFlatToggleRow(
-                                        title = "Aplikasi Esensial (Chrome, 7-Zip, Lightshot)",
-                                        subtitle = "Pasang browser dan utilitas dasar secara otomatis",
+                                        title = "Aplikasi Esensial (Chrome, WinRAR, 7-Zip, Lightshot)",
+                                        subtitle = "Chrome, WinRAR 7.23, 7-Zip, Lightshot, Notepad++ & Lively Wallpaper",
                                         checked = ekstraDesktop,
                                         enabled = !busy,
                                         onCheckedChange = { ekstraDesktop = it; saveSettings() },
                                     )
+                                    if (!isLinuxRunner) {
+                                        RdpFlatToggleRow(
+                                            title = "Studio 3D & Kreator (Blender 3D, Roblox Studio)",
+                                            subtitle = "Blender 4.2 LTS (Mesa3D OpenGL 4.6), Roblox Studio resmi, WebView2 & FFmpeg",
+                                            checked = studioTools,
+                                            enabled = !busy,
+                                            onCheckedChange = { studioTools = it; saveSettings() },
+                                        )
+                                        RdpFlatToggleRow(
+                                            title = "Launcher Desktop ala macOS (XyMac Dock)",
+                                            subtitle = "Frosted Pill Dock + Top Menu Bar macOS + Launchpad di desktop RDP",
+                                            checked = macLauncher,
+                                            enabled = !busy,
+                                            onCheckedChange = { macLauncher = it; saveSettings() },
+                                        )
+                                    }
                                     RdpFlatToggleRow(
-                                        title = "Discord",
-                                        subtitle = "Pasang Discord desktop di sesi RDP (siap login)",
-                                        checked = discordReady,
+                                        title = "Toolchain Developer (C/C++, C#, Rust)",
+                                        subtitle = "LLVM/Clang, .NET SDK 8, Rust + VS Code di sesi RDP (butuh repo workflow terbaru)",
+                                        checked = devTools,
                                         enabled = !busy,
-                                        onCheckedChange = { discordReady = it; saveSettings() },
+                                        onCheckedChange = { devTools = it; saveSettings() },
                                     )
                                     RdpFlatToggleRow(
                                         title = "Tema Visual Windows 10 & Wallpaper XyVerse",
@@ -2132,8 +2029,8 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                     )
                                     Spacer(Modifier.height(4.dp))
                                     RdpFlatToggleRow(
-                                        title = "XyDeskRemote Dashboard + Gaming Boost",
-                                        subtitle = "Buka Dashboard otomatis + Power Plan gaming (tanpa klaim anti-VM)",
+                                        title = "XyDeskRemote Dashboard + Host Performance Boost",
+                                        subtitle = "Buka Dashboard otomatis + Timer 1ms & High Performance Power Plan",
                                         checked = xydeskBoost,
                                         enabled = !busy,
                                         onCheckedChange = { xydeskBoost = it; saveSettings() },
@@ -2147,7 +2044,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                     )
                                     Spacer(Modifier.height(6.dp))
                                     Text(
-                                        text = "Catatan: FPS, MuMu, dan game bersifat best-effort. Runner GitHub tidak punya GPU fisik maupun virtualisasi sarang; hasilnya bisa dilihat di file fps-boost.json / mumu.json pada run Actions.",
+                                        text = "Catatan: Boost FPS bersifat best-effort (runner GitHub tanpa GPU fisik). Grafis 3D lengkap memakai DirectX Juni 2010 + Mesa3D. Hasil tweak ada di fps-boost.json pada run Actions.",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
