@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /_qa/
+Sitemap: https://www.xydeskremote.biz.id/sitemap.xml

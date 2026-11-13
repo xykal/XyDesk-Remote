@@ -1,0 +1,32 @@
+name: Next.js Cloudflare migration checks
+on:
+  pull_request:
+    paths:
+      - 'web-next/**'
+      - 'integration/**'
+      - 'cloudflare/**'
+      - '.github/workflows/web-next-check.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-and-routing:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web-next/package-lock.json
+      - name: Install dependencies
+        working-directory: web-next
+        run: npm ci --no-audit --no-fund
+      - name: Check routing isolation
+        run: node --test integration/router.test.mjs
+      - name: Build Next.js + OpenNext
+        working-directory: web-next
+        run: npm run cf:build
