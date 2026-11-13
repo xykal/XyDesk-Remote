@@ -10,9 +10,37 @@
   <meta name="author" content="XyVerse Technology Global" />
   <meta name="theme-color" content="#08080A" />
   <link rel="canonical" href="https://www.xydeskremote.biz.id/" />
+  <link rel="alternate" hreflang="id" href="https://www.xydeskremote.biz.id/" />
+  <link rel="alternate" hreflang="en" href="https://www.xydeskremote.biz.id/?lang=en" />
+  <link rel="alternate" hreflang="es" href="https://www.xydeskremote.biz.id/?lang=es" />
+  <link rel="alternate" hreflang="pt" href="https://www.xydeskremote.biz.id/?lang=pt" />
+  <link rel="alternate" hreflang="fr" href="https://www.xydeskremote.biz.id/?lang=fr" />
+  <link rel="alternate" hreflang="de" href="https://www.xydeskremote.biz.id/?lang=de" />
+  <link rel="alternate" hreflang="ru" href="https://www.xydeskremote.biz.id/?lang=ru" />
+  <link rel="alternate" hreflang="ar" href="https://www.xydeskremote.biz.id/?lang=ar" />
+  <link rel="alternate" hreflang="zh-CN" href="https://www.xydeskremote.biz.id/?lang=zh" />
+  <link rel="alternate" hreflang="ja" href="https://www.xydeskremote.biz.id/?lang=ja" />
+  <link rel="alternate" hreflang="ko" href="https://www.xydeskremote.biz.id/?lang=ko" />
+  <link rel="alternate" hreflang="vi" href="https://www.xydeskremote.biz.id/?lang=vi" />
+  <link rel="alternate" hreflang="th" href="https://www.xydeskremote.biz.id/?lang=th" />
+  <link rel="alternate" hreflang="tr" href="https://www.xydeskremote.biz.id/?lang=tr" />
+  <link rel="alternate" hreflang="hi" href="https://www.xydeskremote.biz.id/?lang=hi" />
+  <link rel="alternate" hreflang="x-default" href="https://www.xydeskremote.biz.id/" />
+  <meta property="og:locale:alternate" content="en_US" />
+  <meta property="og:locale:alternate" content="es_ES" />
+  <meta property="og:locale:alternate" content="pt_BR" />
+  <meta property="og:locale:alternate" content="ar_SA" />
+  <meta property="og:locale:alternate" content="zh_CN" />
+  <meta property="og:locale:alternate" content="ja_JP" />
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="XyDesk Remote" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <link rel="icon" type="image/png" href="/favicon.png" />
   <link rel="apple-touch-icon" href="/favicon.png" />
-  <meta name="keywords" content="remote desktop android, rdp android, remote pc dari hp, remote windows dari android, aplikasi rdp gratis, remote desktop tanpa pc gaming, xydesk, xydesk remote, rdp github actions, remote desktop e2ee, kontrol pc dari hp" />
+  <meta name="keywords" content="remote desktop android, rdp android, remote pc dari hp, remote windows dari android, aplikasi rdp gratis, remote desktop tanpa pc gaming, xydesk, xydesk remote, rdp github actions, remote desktop e2ee, kontrol pc dari hp, android rdp client, remote desktop app, rdp client for android, remote windows from android, free rdp client, remote desktop protocol client, control pc from phone, remote desktop web, rdp from browser, ios rdp web, pwa remote desktop, remote desktop terbaik, aplikasi remote desktop, remote desktop free download, best rdp client android, remote pc software, windows remote desktop app, akses pc dari android, remote desktop multi monitor, rdp clipboard audio" />
   <meta property="og:site_name" content="XyDesk Remote" />
   <meta property="og:type" content="website" />
   <meta property="og:locale" content="id_ID" />
@@ -1778,6 +1806,54 @@
     </div>
   </footer>
 
+  <!-- Bottom nav melayang full rounded (mobile-first) -->
+  <style>
+    .xy-bottom-nav{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(12px + env(safe-area-inset-bottom,0px));display:flex;align-items:center;gap:2px;padding:7px 9px;background:rgba(14,14,18,.86);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.10);border-radius:999px;z-index:120;box-shadow:0 10px 32px rgba(0,0,0,.45);max-width:calc(100vw - 20px);}
+    .xy-bottom-nav a{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:52px;padding:6px 8px;border-radius:999px;text-decoration:none;color:#A1A1AA;font-size:9.5px;font-weight:700;letter-spacing:.1px;}
+    .xy-bottom-nav a .ic{font-size:16px;line-height:1;}
+    .xy-bottom-nav a:hover,.xy-bottom-nav a:focus{color:#FAFAFA;background:rgba(255,255,255,.07);}
+    .xy-bottom-nav select{appearance:none;-webkit-appearance:none;background:rgba(255,255,255,.07);color:#FAFAFA;border:1px solid rgba(255,255,255,.12);border-radius:999px;padding:8px 12px;font-size:11.5px;font-weight:700;outline:none;max-width:104px;text-overflow:ellipsis;}
+    .xy-install-btn{position:fixed;right:14px;bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:120;border:1px solid rgba(255,255,255,.14);background:#FAFAFA;color:#08080A;border-radius:999px;padding:11px 18px;font-size:12.5px;font-weight:800;cursor:pointer;box-shadow:0 10px 28px rgba(0,0,0,.5);}
+    @media (min-width:900px){.xy-bottom-nav{bottom:20px;}}
+  </style>
+  <nav class="xy-bottom-nav" aria-label="Navigasi cepat">
+    <a href="#top-anchor" onclick="window.scrollTo({top:0,behavior:'smooth'});return false;"><span class="ic">🏠</span>Beranda</a>
+    <a href="#jelajahi"><span class="ic">✨</span>Fitur</a>
+    <a href="rdp.html"><span class="ic">🖥️</span>RDP Web</a>
+    <a href="#download"><span class="ic">⬇️</span>Unduh</a>
+    <a href="status.html"><span class="ic">📡</span>Status</a>
+    <select id="xyLangSelect" aria-label="Bahasa / Language"></select>
+  </nav>
+  <button class="xy-install-btn" id="xyInstallBtn" hidden>📲 Install App</button>
+
+  <script>
+    // PWA: registrasi service worker + tombol install (Android/Desktop/iOS)
+    (function () {
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.register("/sw.js").catch(function () {});
+      }
+      var deferred = null;
+      var btn = document.getElementById("xyInstallBtn");
+      window.addEventListener("beforeinstallprompt", function (e) {
+        e.preventDefault(); deferred = e;
+        if (btn) btn.hidden = false;
+      });
+      if (btn) btn.addEventListener("click", function () {
+        if (!deferred) { return; }
+        deferred.prompt();
+        deferred.userChoice.finally(function () { deferred = null; btn.hidden = true; });
+      });
+      // iOS: selalu tawarkan tombol (Safari tidak punya beforeinstallprompt)
+      var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+      if (isIOS && !navigator.standalone && btn) btn.hidden = false;
+      if (isIOS && btn) btn.addEventListener("click", function () {
+        if (deferred) return;
+        alert("Di iPhone/iPad: ketuk tombol Share di Safari lalu pilih \"Add to Home Screen\" untuk memasang XyDesk Remote.");
+      });
+    })();
+  </script>
+  <script src="/lang.js"></script>
+
   <script>
     (function () {
       var currentTheme = localStorage.getItem("xydesk_theme") || "dark";
@@ -2082,7 +2158,7 @@
         idDefaults[el.getAttribute("data-i18n")] = el.textContent;
       });
 
-      var enDict = {
+      var enDict = window.__xyEnDict = {
         "nav.about": "About & Comparison",
         "nav.cap": "Latest Features",
         "nav.changelog": "Changelog",
@@ -2190,6 +2266,12 @@
       function applyLang(l) {
         currentLang = l;
         localStorage.setItem("xydesk_lang", l);
+        if (window.XyWebLang) {
+          window.XyWebLang.apply(l).then(function () {
+            applyTheme(currentTheme); renderDownloadStats(); renderActiveSessionStats();
+          });
+          return;
+        }
         document.documentElement.setAttribute("lang", l);
         document.querySelectorAll("[data-i18n]").forEach(function (el) {
           var k = el.getAttribute("data-i18n");

@@ -1553,3 +1553,11 @@ Tiga permintaan pemilik ditangani tuntas:
 - Kontrol user: seksi Tampilan → kartu "Skala UI" (Otomatis/Kecil/Sedang/Besar) via `XySegmented`, state langsung aktif (`XyUiScaleState`, pola sama `XyMenuStyleState`).
 - Perbaikan layout tetap: sidebar menu utama `width(312.dp)` -> `minOf(312.dp, 85% lebar layar)` (muat di HP kecil).
 - Uji lokal: tidak ada (gradlew tidak berjalan di sandbox); verifikasi lewat CI Kotlin syntax guard + Build APK (compile semua modul).
+
+## 2026-11-13 — Web global: multi-bahasa 20+, PWA/iOS, bottom nav, RDP web, SEO sedunia, hardening
+- `web/lang.js` (baru): mesin multi-bahasa — 20 bahasa bawaan (label) + auto-translate 100+ bahasa via `/api/ui/translate` (batch 40 item, cache localStorage `xy_lang_cache_v2`), sumber teks = `window.__xyEnDict` (EN) + teks asli (ID). Pemilih bahasa ada di bottom nav.
+- `web/manifest.json` + `web/sw.js` (baru) + ikon 192/512/apple-touch: PWA install di Android/Desktop/iOS (Safari Add to Home Screen). Sebeluminstallprompt ditangani; iOS diberi panduan popup.
+- `web/index.html`: bottom nav melayang full rounded (blur, safe-area), keywords global ID+EN, hreflang 15 bahasa + x-default, og:locale:alternate, meta apple PWA, enDict diglobalkan, applyLang mendelegasi ke XyWebLang.
+- `web/rdp.html` (baru): klien RDP dari browser (guacamole-common-js CDN) — form koneksi (host/port/user/pass/resolusi/gateway), menu kontrol sesi ala APK (keyboard, mode mouse, fit, fullscreen, clipboard, putus). Token via `/api/rdp/token` (gateway). PWA-friendly.
+- `web/sitemap.xml`: semua halaman + xhtml:link alternates + priority/changefreq. `cloudflare/worker.mjs`: `withSecurityHeaders` (CSP, HSTS, nosniff, X-Frame-Options, Referrer-Policy, Permissions-Policy) untuk semua respons statis — **49/49 tes worker lulus** (2 tes sempat gagal karena lupa await, diperbaiki).
+- Catatan: gateway RDP backend (guacd bridge) = PR lanjutan berbasis Rust; deploy butuh VPS (keputusan pemilik).

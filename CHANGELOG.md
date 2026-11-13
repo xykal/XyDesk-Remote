@@ -4,6 +4,12 @@ Semua perubahan sejak rilis publik v1.0.2 sampai v1.1.8.
 Format: versi (kode) — tanggal — poin perubahan.
 
 ## Belum terbit
+- Web global: **20 bahasa** (+ auto-translate 100+ bahasa via /api/ui/translate, hasil di-cache) lewat pemilih bahasa di bottom nav; hreflang + sitemap alternates untuk SEO sedunia.
+- **PWA**: manifest + service worker + tombol Install — bisa dipasang di Android, desktop, dan **iOS** (Safari → Add to Home Screen).
+- **Bottom nav melayang full rounded** (glass, safe-area aware) di semua halaman web.
+- **RDP dari browser** (`rdp.html`): form koneksi + menu kontrol sesi (keyboard, mouse, fit, fullscreen, clipboard, putus) — backend gateway menyusul (butuh VPS).
+- SEO: keywords global (ID+EN), og:locale:alternate, JSON-LD tetap; sitemap lengkap semua halaman + priority.
+- Keamanan web: header CSP, HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy di semua respons (49/49 tes worker lulus).
 - Skala UI adaptif di semua layar: UI otomatis menyesuaikan ukuran layar HP (mencegah kegedean di HP kecil) — berlaku untuk semua layar termasuk menu utama, menu sesi, dialog, dan kartu. Bisa dipaksa manual lewat seksi Tampilan → "Skala UI" (Otomatis/Kecil/Sedang/Besar).
 - Menu utama gaya sidebar tidak lagi lebar tetap 312dp — kini maksimal 85% lebar layar (muat di HP kecil).
 - XyShield Anti-Crack: pemindaian stack-trace berbasis substring ("luckypatcher"/"pmshook"/"apksignaturekiller") dihapus — nama kelas kebetulan pernah memicu peringatan "DETEKSI MODIFIKASI / CRACK" pada build resmi. Deteksi kelas hook pasti (MT SignatureKiller, LuckyPatcher, Xposed, Substrate) tetap aktif.

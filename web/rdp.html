@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="id" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>RDP Web — Sambungkan ke PC Windows dari Browser · XyDesk Remote</title>
+  <meta name="description" content="Sambungkan sesi Remote Desktop (RDP) ke PC Windows langsung dari browser — desktop, Android, maupun iOS (PWA). Menu kontrol sesi: keyboard, mouse, layar penuh, dan putuskan sesi." />
+  <meta name="robots" content="index,follow" />
+  <meta name="theme-color" content="#08080A" />
+  <link rel="canonical" href="https://www.xydeskremote.biz.id/rdp.html" />
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <style>
+    :root, [data-theme="dark"] {
+      --bg: #08080A; --surface: #0E0E12; --surface-alt: #15151A;
+      --line: #232329; --text: #FAFAFA; --muted: #A1A1AA;
+      --accent: #FAFAFA; --ok: #4ADE80; --bad: #F87171;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+      font-family: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif; }
+    a { color: inherit; }
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 18px 16px 120px; }
+    .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0 18px; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: -.3px; }
+    .brand img { width: 30px; height: 30px; border-radius: 8px; }
+    .pill { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line);
+      background: var(--surface); border-radius: 999px; padding: 9px 16px; font-size: 13px;
+      font-weight: 600; color: var(--text); text-decoration: none; cursor: pointer; }
+    .pill:hover { border-color: var(--muted); }
+    .pill.primary { background: var(--accent); color: var(--bg); border-color: transparent; }
+    .pill.danger { border-color: var(--bad); color: var(--bad); }
+    .card { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 22px; }
+    h1 { font-size: clamp(22px, 5vw, 34px); letter-spacing: -.8px; margin: 6px 0 10px; }
+    .lead { color: var(--muted); font-size: 14.5px; line-height: 1.65; margin: 0 0 18px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+    label { display: block; font-size: 12px; font-weight: 700; color: var(--muted); margin: 12px 0 6px; }
+    input, select { width: 100%; background: var(--surface-alt); color: var(--text);
+      border: 1px solid var(--line); border-radius: 12px; padding: 11px 12px; font-size: 14px; outline: none; }
+    input:focus, select:focus { border-color: var(--muted); }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+    .hint { color: var(--muted); font-size: 12px; margin-top: 14px; line-height: 1.6; }
+    #stage { display: none; margin-top: 16px; }
+    #screen { width: 100%; border-radius: 16px; overflow: hidden; background: #000; border: 1px solid var(--line); touch-action: none; }
+    #screen canvas { width: 100%; display: block; }
+    .session-bar { display: none; align-items: center; gap: 8px; flex-wrap: wrap;
+      background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+      padding: 8px 12px; margin-bottom: 12px; position: sticky; top: 10px; z-index: 40;
+      backdrop-filter: blur(14px); }
+    .session-bar .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); }
+    .session-bar .label { font-size: 12.5px; font-weight: 700; margin-right: 4px; }
+    .session-bar button { all: unset; cursor: pointer; border: 1px solid var(--line); border-radius: 999px;
+      padding: 7px 13px; font-size: 12px; font-weight: 700; color: var(--text); background: var(--surface-alt); }
+    .session-bar button.on { background: var(--accent); color: var(--bg); border-color: transparent; }
+    .status { display: none; margin-top: 12px; font-size: 13px; color: var(--muted); }
+    .status.err { color: var(--bad); }
+    .status.ok { color: var(--ok); }
+    footer { margin-top: 26px; color: var(--muted); font-size: 12px; line-height: 1.7; }
+    @media (max-width: 560px) { .wrap { padding-bottom: 140px; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <a class="brand" href="/"><img src="/favicon.svg" alt="" /> XyDesk Remote</a>
+      <div style="display:flex; gap:8px;">
+        <a class="pill" href="/">Beranda</a>
+        <a class="pill" href="/#download">Unduh APK</a>
+      </div>
+    </div>
+
+    <div class="card" id="connectCard">
+      <h1>🖥️ RDP dari Browser</h1>
+      <p class="lead">
+        Sambungkan sesi Remote Desktop ke PC Windows milikmu langsung dari browser —
+        desktop, Android, sampai <b>iOS</b> (pasang sebagai PWA: <i>Share → Add to Home Screen</i>).
+        Protokol RDP asli lewat gateway aman XyDesk — sama seperti di APK, lengkap dengan
+        menu kontrol sesi (keyboard, mouse, layar penuh).
+      </p>
+
+      <div class="grid">
+        <div>
+          <label for="host">Alamat PC / Host</label>
+          <input id="host" placeholder="192.168.1.10 atau pc-lo.tailnet.ts.net" autocomplete="off" />
+        </div>
+        <div>
+          <label for="port">Port RDP</label>
+          <input id="port" value="3389" inputmode="numeric" />
+        </div>
+        <div>
+          <label for="user">Nama pengguna</label>
+          <input id="user" placeholder="Administrator" autocomplete="username" />
+        </div>
+        <div>
+          <label for="pass">Kata sandi</label>
+          <input id="pass" type="password" placeholder="••••••••" autocomplete="current-password" />
+        </div>
+        <div>
+          <label for="res">Resolusi</label>
+          <select id="res">
+            <option value="1280x720">1280 × 720</option>
+            <option value="1600x900" selected>1600 × 900</option>
+            <option value="1920x1080">1920 × 1080</option>
+            <option value="2560x1440">2560 × 1440</option>
+          </select>
+        </div>
+        <div>
+          <label for="gateway">Gateway RDP</label>
+          <input id="gateway" value="wss://rdp-gateway.xydeskremote.biz.id/websocket-tunnel" />
+        </div>
+      </div>
+
+      <div class="row">
+        <button class="pill primary" id="btnConnect">Sambungkan</button>
+        <button class="pill" id="btnPanduan">Cara pakai / iOS PWA</button>
+      </div>
+      <div class="status" id="status"></div>
+      <p class="hint">
+        🔒 Kata sandi dikirim terenkripsi ke gateway (token HMAC + AES) dan tidak disimpan.
+        Butuh host agent/guacd aktif di sisi gateway — lihat <a href="/host.html">Host Agent</a>.
+        Gateway RDP berjalan di VPS XyDesk (konfigurasi pemilik).
+      </p>
+      <div id="panduan" style="display:none; margin-top:14px; border-top:1px solid var(--line); padding-top:14px;" class="hint">
+        <b>iOS (iPhone/iPad):</b> buka halaman ini di Safari → tombol <i>Share</i> →
+        <i>Add to Home Screen</i> → aplikasi "XyDesk Remote" terpasang layaknya app native.<br />
+        <b>Android/Desktop:</b> tombol <i>Install</i> muncul otomatis di navigasi bawah
+        (Chrome/Edge) — atau menu browser → <i>Install app</i>.<br />
+        <b>Menu kontrol sesi:</b> setelah tersambung, bar melayang di atas layar berisi
+        keyboard, mode mouse, layar penuh, skala fit, dan putuskan sesi.
+      </div>
+    </div>
+
+    <div id="stage">
+      <div class="session-bar" id="sessionBar">
+        <span class="dot"></span><span class="label" id="sessionLabel">Sesi aktif</span>
+        <button id="btnKbd" title="Keyboard">⌨ Keyboard</button>
+        <button id="btnMouse" title="Mode mouse">🖱 Mouse: Otomatis</button>
+        <button id="btnFit" title="Sesuaikan layar">⛶ Fit</button>
+        <button id="btnFull" title="Layar penuh">⛶ Penuh</button>
+        <button id="btnClip" title="Sinkron clipboard">📋 Clipboard</button>
+        <button id="btnDisconnect" style="border-color:#F87171; color:#F87171;">✕ Putus</button>
+      </div>
+      <div id="screen"></div>
+    </div>
+
+    <footer>
+      XyDesk Remote · XyVerse Technology Global — RDP Web memakai protokol Remote Desktop (RDP)
+      lewat gateway aman. <a href="/privacy.html">Privasi</a> · <a href="/terms.html">Ketentuan</a>
+    </footer>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/guacamole-common-js@1.5.4/dist/guacamole-common.min.js"></script>
+  <script>
+  (function () {
+    var statusEl = document.getElementById("status");
+    var client = null, tunnel = null, keyboard = null, mouse = null;
+    var mouseMode = 0; // 0 = otomatis, 1 = sentuh (drag = klik-kanan), 2 = trackpad
+
+    function say(msg, cls) {
+      statusEl.style.display = "block";
+      statusEl.className = "status" + (cls ? " " + cls : "");
+      statusEl.textContent = msg;
+    }
+    document.getElementById("btnPanduan").addEventListener("click", function () {
+      var p = document.getElementById("panduan");
+      p.style.display = p.style.display === "none" ? "block" : "none";
+    });
+
+    function disconnect() {
+      try { if (client) client.disconnect(); } catch (e) {}
+      client = null; tunnel = null;
+      document.getElementById("sessionBar").style.display = "none";
+      document.getElementById("stage").style.display = "none";
+      say("Sesi diputuskan.", "");
+    }
+
+    function connect() {
+      var host = document.getElementById("host").value.trim();
+      var port = document.getElementById("port").value.trim() || "3389";
+      var user = document.getElementById("user").value;
+      var pass = document.getElementById("pass").value;
+      var res = document.getElementById("res").value.split("x");
+      var gateway = document.getElementById("gateway").value.trim();
+      if (!host) { say("Isi alamat PC/host dulu ya.", "err"); return; }
+      if (typeof Guacamole === "undefined") {
+        say("Pustaka RDP (guacamole-common-js) gagal dimuat — cek koneksi internet.", "err");
+        return;
+      }
+      say("Menyiapkan token terenkripsi…", "");
+      // Token dibuat gateway dari kredensial (HMAC + AES). Endpoint ini disediakan
+      // gateway; kalau belum aktif, pesan error yang ramah ditampilkan.
+      fetch("/api/rdp/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ host: host, port: Number(port), user: user, pass: pass, width: Number(res[0]), height: Number(res[1]) })
+      }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (out) {
+          if (!out.ok || !out.j || !out.j.token) {
+            say((out.j && out.j.message) || "Gateway RDP belum aktif. Pemilik perlu men-deploy gateway (butuh VPS). Halaman ini tetap bisa dicoba setelah gateway live.", "err");
+            return;
+          }
+          startSession(gateway, out.j.token, Number(res[0]), Number(res[1]));
+        })
+        .catch(function () {
+          say("Gateway RDP belum terjangkau. Butuh deploy gateway (VPS) — hubungi pemilik.", "err");
+        });
+    }
+
+    function startSession(gateway, token, width, height) {
+      say("Membuka sesi RDP…", "ok");
+      tunnel = new Guacamole.WebSocketTunnel(gateway + (gateway.indexOf("?") >= 0 ? "&" : "?") + "token=" + encodeURIComponent(token));
+      client = new Guacamole.Client(tunnel);
+      var screen = document.getElementById("screen");
+      screen.innerHTML = "";
+      screen.appendChild(client.getDisplay().getElement());
+
+      client.onerror = function (status) {
+        var msg = (Guacamole.Client.Status && status && status.message) || "Koneksi gagal.";
+        say("Terputus: " + msg, "err");
+        disconnect();
+      };
+      client.onstatechange = function (state) {
+        if (state === 3) { // CONNECTED
+          document.getElementById("stage").style.display = "block";
+          document.getElementById("sessionBar").style.display = "flex";
+          say("Sesi aktif — gunakan menu kontrol di atas layar.", "ok");
+          attachInput(client, width, height);
+        } else if (state === 4 || state === 5) {
+          disconnect();
+        }
+      };
+
+      // Parameter sesi — sama seperti yang dikirim klien RDP (size/audio/video).
+      var params = {};
+      params.width = width; params.height = height; params.dpi = 96;
+      client.connect(params);
+    }
+
+    function attachInput(c, width, height) {
+      var display = c.getDisplay();
+      var screen = document.getElementById("screen");
+      keyboard = new Guacamole.Keyboard(document);
+      keyboard.onkeydown = function (keysym) { return c.sendKeyEvent(1, keysym); };
+      keyboard.onkeyup = function (keysym) { return c.sendKeyEvent(0, keysym); };
+      mouse = new Guacamole.Mouse(screen);
+      mouse.onmousedown = mouse.onmouseup = mouse.onmousemove = function (state) {
+        c.sendMouseState(state);
+      };
+      // Scroll 2 jari / wheel.
+      screen.addEventListener("wheel", function (e) {
+        e.preventDefault();
+        var st = mouse.currentState || {};
+        var dx = e.deltaX > 0 ? 1 : (e.deltaX < 0 ? -1 : 0);
+        var dy = e.deltaY > 0 ? 1 : (e.deltaY < 0 ? -1 : 0);
+        c.sendMouseState({ x: st.x || 0, y: st.y || 0, button: (dy < 0 ? 16 : 0) | (dy > 0 ? 32 : 0) | (dx < 0 ? 64 : 0) | (dx > 0 ? 128 : 0) });
+        c.sendMouseState({ x: st.x || 0, y: st.y || 0, button: 0 });
+      }, { passive: false });
+
+      document.getElementById("btnKbd").addEventListener("click", function () {
+        var el = document.createElement("input");
+        el.style.cssText = "position:fixed; bottom:120px; left:50%; transform:translateX(-50%); z-index:99; font-size:16px; padding:10px 14px; border-radius:12px; border:1px solid #444; background:#15151A; color:#fff;";
+        el.placeholder = "Ketik untuk kirim ke PC…";
+        document.body.appendChild(el); el.focus();
+        el.addEventListener("blur", function () { el.remove(); });
+      });
+      document.getElementById("btnMouse").addEventListener("click", function () {
+        mouseMode = (mouseMode + 1) % 3;
+        var label = ["Otomatis", "Sentuh", "Trackpad"][mouseMode];
+        this.textContent = "🖱 Mouse: " + label;
+      });
+      document.getElementById("btnFit").addEventListener("click", function () { try { display.fit(); c.sendSize(screen.clientWidth, screen.clientHeight); } catch (e) {} });
+      document.getElementById("btnFull").addEventListener("click", function () {
+        var el = document.getElementById("stage");
+        if (document.fullscreenElement) document.exitFullscreen();
+        else if (el.requestFullscreen) el.requestFullscreen();
+      });
+      document.getElementById("btnClip").addEventListener("click", function () {
+        c.createClipboardStream().sendText ? null : null;
+        navigator.clipboard.readText().then(function (txt) {
+          var stream = c.createClipboardStream();
+          stream.sendText(txt || "");
+          say("Clipboard dikirim ke PC.", "ok");
+        }).catch(function () { say("Izin clipboard ditolak browser.", "err"); });
+      });
+      document.getElementById("btnDisconnect").addEventListener("click", disconnect);
+    }
+
+    document.getElementById("btnConnect").addEventListener("click", connect);
+  })();
+  </script>
+</body>
+</html>
