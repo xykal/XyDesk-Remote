@@ -141,6 +141,8 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
     var fpsBoost by remember { mutableStateOf(prefs.getString("fps_boost", "ya") != "tidak") }
     var win10Theme by remember { mutableStateOf(prefs.getString("win10", "ya") != "tidak") }
     var ekstraDesktop by remember { mutableStateOf(prefs.getString("ekstra", "ya") != "tidak") }
+    var studioTools by remember { mutableStateOf(prefs.getString("studio_tools", "ya") != "tidak") }
+    var macLauncher by remember { mutableStateOf(prefs.getString("mac_launcher", "tidak") == "ya") }
     var devTools by remember { mutableStateOf(prefs.getString("devtools", "tidak") == "ya") }
 
     // Secret configuration & password vault lokal
@@ -218,6 +220,8 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
             .putString("fps_boost", if (fpsBoost) "ya" else "tidak")
             .putString("win10", if (win10Theme) "ya" else "tidak")
             .putString("ekstra", if (ekstraDesktop) "ya" else "tidak")
+            .putString("studio_tools", if (studioTools) "ya" else "tidak")
+            .putString("mac_launcher", if (macLauncher) "ya" else "tidak")
             .putString("devtools", if (devTools) "ya" else "tidak")
             .putBoolean("remember_rdp_pass", rememberPasswordLocal)
             .apply()
@@ -342,8 +346,10 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
         put("win10", if (win10Theme) "ya" else "tidak")
         put("xydesk", if (xydeskBoost) "ya" else "tidak")
         put("ekstra", if (ekstraDesktop) "ya" else "tidak")
-        // Dev tools dikirim hanya saat aktif: workflow repo lama tidak mengenal
-        // input ini (dispatch ditolak 422), jadi default diam tidak mengganggu.
+        // Input baru dikirim hanya saat menyimpang dari default supaya repo
+        // fork lama yang belum tersinkron tidak menolak dispatch dengan 422.
+        if (!studioTools) put("studio_tools", "tidak")
+        if (macLauncher) put("mac_launcher", "ya")
         if (devTools) put("devtools", "ya")
         put("grafis", grafis)
         put("microphone", if (microphone) "ya" else "tidak")
@@ -1648,6 +1654,8 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                                 debloat = "tidak"
                                                 win10Theme = false
                                                 ekstraDesktop = false
+                                                studioTools = false
+                                                macLauncher = false
                                                 grafis = "tidak"
                                                 saveSettings()
                                                 successMessage = "Preset Boot Kilat diterapkan."
@@ -1666,6 +1674,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                                 debloat = "ringan"
                                                 win10Theme = !isLinuxRunner
                                                 ekstraDesktop = true
+                                                studioTools = !isLinuxRunner
                                                 grafis = "software"
                                                 saveSettings()
                                                 successMessage = "Preset Lengkap + Anti-Reset diterapkan."
@@ -1730,7 +1739,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                         ) {
                                             Text("Pilih Sistem Operasi & Versi Image:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                                             listOf(
-                                                Triple("windows-2022", "desktop", "Windows Server 2022 (Stabil · GTA SA-MP & Minecraft)"),
+                                                Triple("windows-2022", "desktop", "Windows Server 2022 (Stabil · Desktop & Studio 3D)"),
                                                 Triple("windows-2025", "desktop", "Windows Server 2025 (Kernel Terbaru & Cepat)"),
                                                 Triple("ubuntu-24.04", "desktop", "Ubuntu 24.04 LTS Desktop (XFCE4 + XRDP :3389)"),
                                                 Triple("ubuntu-24.04", "polos", "Ubuntu 24.04 LTS Polos (Headless SSH :22)"),
@@ -1971,12 +1980,28 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                     )
                                     Spacer(Modifier.height(4.dp))
                                     RdpFlatToggleRow(
-                                        title = "Aplikasi Esensial (Chrome, 7-Zip, Lightshot)",
-                                        subtitle = "Pasang browser dan utilitas dasar secara otomatis",
+                                        title = "Aplikasi Esensial (Chrome, WinRAR, 7-Zip, Lightshot)",
+                                        subtitle = "Chrome, WinRAR 7.23, 7-Zip, Lightshot, Notepad++ & Lively Wallpaper",
                                         checked = ekstraDesktop,
                                         enabled = !busy,
                                         onCheckedChange = { ekstraDesktop = it; saveSettings() },
                                     )
+                                    if (!isLinuxRunner) {
+                                        RdpFlatToggleRow(
+                                            title = "Studio 3D & Kreator (Blender 3D, Roblox Studio)",
+                                            subtitle = "Blender 4.2 LTS (Mesa3D OpenGL 4.6), Roblox Studio resmi, WebView2 & FFmpeg",
+                                            checked = studioTools,
+                                            enabled = !busy,
+                                            onCheckedChange = { studioTools = it; saveSettings() },
+                                        )
+                                        RdpFlatToggleRow(
+                                            title = "Launcher Desktop ala macOS (XyMac Dock)",
+                                            subtitle = "Frosted Pill Dock + Top Menu Bar macOS + Launchpad di desktop RDP",
+                                            checked = macLauncher,
+                                            enabled = !busy,
+                                            onCheckedChange = { macLauncher = it; saveSettings() },
+                                        )
+                                    }
                                     RdpFlatToggleRow(
                                         title = "Toolchain Developer (C/C++, C#, Rust)",
                                         subtitle = "LLVM/Clang, .NET SDK 8, Rust + VS Code di sesi RDP (butuh repo workflow terbaru)",
@@ -2004,8 +2029,8 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                     )
                                     Spacer(Modifier.height(4.dp))
                                     RdpFlatToggleRow(
-                                        title = "XyDeskRemote Dashboard + Gaming Boost",
-                                        subtitle = "Buka Dashboard otomatis + Power Plan gaming (tanpa klaim anti-VM)",
+                                        title = "XyDeskRemote Dashboard + Host Performance Boost",
+                                        subtitle = "Buka Dashboard otomatis + Timer 1ms & High Performance Power Plan",
                                         checked = xydeskBoost,
                                         enabled = !busy,
                                         onCheckedChange = { xydeskBoost = it; saveSettings() },

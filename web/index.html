@@ -7,7 +7,7 @@
   <meta name="description" content="Klien RDP Android untuk mengakses PC Windows: kontrol sentuh, keyboard, clipboard, audio, dan multi-monitor. Unduh APK resmi sesuai ABI perangkat." />
   <!-- SEO metadata:start -->
   <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
-  <meta name="author" content="XyVerse Technology Global" />
+  <meta name="author" content="xykal (Haekal Saputra) · XyVerse Technology Global" />
   <meta name="theme-color" content="#08080A" />
   <link rel="canonical" href="https://www.xydeskremote.biz.id/" />
   <link rel="alternate" hreflang="id" href="https://www.xydeskremote.biz.id/" />
@@ -40,7 +40,7 @@
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <link rel="icon" type="image/png" href="/favicon.png" />
   <link rel="apple-touch-icon" href="/favicon.png" />
-  <meta name="keywords" content="remote desktop android, rdp android, remote pc dari hp, remote windows dari android, aplikasi rdp gratis, remote desktop tanpa pc gaming, xydesk, xydesk remote, rdp github actions, remote desktop e2ee, kontrol pc dari hp, android rdp client, remote desktop app, rdp client for android, remote windows from android, free rdp client, remote desktop protocol client, control pc from phone, remote desktop web, rdp from browser, ios rdp web, pwa remote desktop, remote desktop terbaik, aplikasi remote desktop, remote desktop free download, best rdp client android, remote pc software, windows remote desktop app, akses pc dari android, remote desktop multi monitor, rdp clipboard audio" />
+  <meta name="keywords" content="xydesk remote, xyrdp, xyverse, xykal, haekal saputra, rdp gratis, cloud pc, remote desktop android, rdp android, remote pc dari hp, remote windows dari android, aplikasi rdp gratis, remote desktop tanpa pc gaming, xydesk, rdp github actions, kontrol pc dari hp, android rdp client, remote desktop app, rdp client for android, remote windows from android, free rdp client, remote desktop protocol client, control pc from phone, remote desktop web, rdp from browser, pwa remote desktop, remote desktop terbaik, aplikasi remote desktop, remote desktop free download, best rdp client android, remote pc software, windows remote desktop app, akses pc dari android, remote desktop multi monitor, rdp clipboard audio, transfer file rdp, gamepad rdp android" />
   <meta property="og:site_name" content="XyDesk Remote" />
   <meta property="og:type" content="website" />
   <meta property="og:locale" content="id_ID" />
@@ -62,12 +62,42 @@
   "@context": "https://schema.org",
   "@graph": [
     {
+      "@type": "Person",
+      "@id": "https://www.xydeskremote.biz.id/#founder",
+      "name": "Haekal Saputra",
+      "alternateName": "xykal",
+      "jobTitle": "Founder & Lead Architect",
+      "nationality": {
+        "@type": "Country",
+        "name": "Indonesia"
+      },
+      "worksFor": {
+        "@id": "https://www.xydeskremote.biz.id/#organization"
+      },
+      "sameAs": [
+        "https://github.com/xykal"
+      ]
+    },
+    {
       "@type": "Organization",
       "@id": "https://www.xydeskremote.biz.id/#organization",
-      "name": "XyVerse Technology Global",
+      "name": "XyVerse",
+      "legalName": "XyVerse Technology Global",
       "url": "https://www.xydeskremote.biz.id/",
+      "founder": {
+        "@id": "https://www.xydeskremote.biz.id/#founder"
+      },
+      "location": {
+        "@type": "Place",
+        "address": {
+          "@type": "PostalAddress",
+          "addressCountry": "ID",
+          "addressCountryName": "Indonesia"
+        }
+      },
       "sameAs": [
-        "https://github.com/xykal/XyDesk-Remote"
+        "https://github.com/xykal/XyDesk-Remote",
+        "https://github.com/xykal/XyRDP"
       ]
     },
     {
@@ -86,19 +116,22 @@
       "name": "XyDesk Remote",
       "applicationCategory": "UtilitiesApplication",
       "operatingSystem": "Android 6.0 and later",
-      "softwareVersion": "1.1.20",
+      "softwareVersion": "1.1.28",
       "url": "https://www.xydeskremote.biz.id/",
       "downloadUrl": "https://github.com/xykal/XyDesk-Remote/releases/latest",
-      "description": "Klien RDP & Terminal SSH-2 Android dengan On-Mic, Buat RDP Cloud Gratis (Windows, Linux XFCE4, Linux Polos SSH), Chat Global E2EE Liquid Glass (.webp.crypto15), dan Native GUI Host Agent.",
+      "description": "Klien Remote Desktop (RDP) & Terminal SSH-2 Android karya xykal (Haekal Saputra) dan tim XyVerse Indonesia: audio dua arah (On-Mic), transfer file HP↔PC (XyDesk:\\Download), gamepad sentuh ala AetherSX2, serta integrasi Buat RDP Cloud Gratis (XyRDP).",
       "author": {
+        "@id": "https://www.xydeskremote.biz.id/#founder"
+      },
+      "publisher": {
         "@id": "https://www.xydeskremote.biz.id/#organization"
       },
       "featureList": [
-        "Remote Desktop Protocol (RDP)",
-        "Kontrol sentuh dan keyboard",
-        "Clipboard dua arah",
-        "Pengalihan audio RDP",
-        "Pilihan multi-monitor"
+        "Remote Desktop Protocol (RDP) 60–120 FPS",
+        "Kontrol sentuh, keyboard, trackpad, dan gamepad ala AetherSX2",
+        "Transfer file HP↔PC langsung ke XyDesk:\\Download",
+        "Pengalihan audio RDP & mikrofon dua arah",
+        "Integrasi Buat RDP Cloud Gratis (XyRDP)"
       ]
     }
   ]
@@ -1550,10 +1583,10 @@
     <!-- Editorial Intro -->
     <section class="intro">
       <div class="container">
-        <div class="intro-meta mono" data-dyn="intro-meta">XyRDP Zero-Lag Engine · RDP · APK v2.0.0 · Sovereign Founder @xykal</div>
-        <h1 data-i18n="intro.title">Remote Desktop (XyRDP), Gaming 120Hz &amp; Cloud RDP dari Android</h1>
+        <div class="intro-meta mono" data-dyn="intro-meta">XyRDP Engine · FreeRDP 3 · Founder: xykal (Haekal Saputra) · Tim XyVerse</div>
+        <h1 data-i18n="intro.title">Remote Desktop (XyRDP), Streaming 120Hz &amp; Cloud PC dari Android</h1>
         <p data-i18n="intro.lead">
-          Hubungkan perangkat Android ke server RDP mana pun (Windows, Linux, atau XyRDP Zero-Lag Gaming Engine 120FPS · 1ms · Anti-Blur). Fokus penuh pada koneksi <strong>RDP yang ringan dan mulus</strong>.
+          Hubungkan perangkat Android ke PC Windows, VPS, atau Cloud PC XyRDP (60–120 FPS · Audio Dua Arah · Transfer File <code>XyDesk:\Download</code> · Gamepad Sentuh). Fokus murni pada <strong>koneksi RDP yang ringan, cepat, dan mulus</strong>.
         </p>
         <div class="intro-actions">
           <a href="#download" class="pill-btn primary lg" data-i18n="intro.cta.dl">
@@ -1613,9 +1646,9 @@
             <div class="ledger-sub" data-i18n="led.2.s">Mic RDP langsung di dalam sesi</div>
           </div>
           <div class="ledger-cell">
-            <div class="ledger-k" data-i18n="led.3.k">Chat Global &amp; Feed</div>
-            <div class="ledger-v mono">WA Bubble · OG All Sosmed</div>
-            <div class="ledger-sub" data-i18n="led.3.s">Top 1–10 Rewards · Auto Badges · E2EE</div>
+            <div class="ledger-k" data-i18n="led.3.k">Kontrol &amp; Transfer</div>
+            <div class="ledger-v mono">Gamepad · XyDesk:\Download</div>
+            <div class="ledger-sub" data-i18n="led.3.s">Sentuh · Keyboard · Dual-Stick · File</div>
           </div>
           <div class="ledger-cell">
             <div class="ledger-k" data-i18n="led.4.k">Windows Host Agent</div>
@@ -1655,7 +1688,7 @@
         <div class="explore-grid">
           <a class="explore-tile" href="abi.html"><strong>Cek APK untuk HP-mu</strong><span>Deteksi arsitektur otomatis dan unduh varian APK yang tepat.</span></a>
           <a class="explore-tile" href="host.html"><strong>Host Agent Windows</strong><span>Ubah PC Windows kamu jadi host remote dengan satu file EXE.</span></a>
-          <a class="explore-tile" href="about.html"><strong>Tentang &amp; Screenshot</strong><span>Profil XyVerse Technology Global dan galeri screenshot aplikasi.</span></a>
+          <a class="explore-tile" href="about.html"><strong>Tentang &amp; Founder</strong><span>Profil Founder xykal (Haekal Saputra), Tim XyVerse Indonesia &amp; galeri screenshot asli.</span></a>
           <a class="explore-tile" href="abi.html#versions-list"><strong>Riwayat Versi</strong><span>Semua rilis yang pernah terbit beserta catatan perubahannya.</span></a>
           <a class="explore-tile" href="status.html"><strong>Status Sistem</strong><span>Kesehatan layanan dan statistik rilis secara langsung.</span></a>
         </div>
@@ -1792,10 +1825,10 @@
   <footer>
     <div class="container footer-inner">
       <div>
-        <strong>XyDesk Remote</strong> · Powered by <span>XyVerse Technology Global</span>
+        <strong>XyDesk Remote</strong> · Founder: <strong>xykal (Haekal Saputra)</strong> · Tim <span>XyVerse</span> (Indonesia)
       </div>
       <div class="footer-nav">
-        <a href="about.html">Perbedaan XyDesk</a>
+        <a href="about.html">Tentang &amp; Founder</a>
         <a href="abi.html#versions-list">Riwayat Versi</a>
         <a href="host.html" data-i18n="nav.host">Host Agent (Eksperimental)</a>
         <a href="status.html" data-i18n="foot.status">Status &amp; Kesehatan</a>
@@ -1810,18 +1843,19 @@
   <style>
     .xy-bottom-nav{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(12px + env(safe-area-inset-bottom,0px));display:flex;align-items:center;gap:2px;padding:7px 9px;background:rgba(14,14,18,.86);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.10);border-radius:999px;z-index:120;box-shadow:0 10px 32px rgba(0,0,0,.45);max-width:calc(100vw - 20px);}
     .xy-bottom-nav a{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:52px;padding:6px 8px;border-radius:999px;text-decoration:none;color:#A1A1AA;font-size:9.5px;font-weight:700;letter-spacing:.1px;}
-    .xy-bottom-nav a .ic{font-size:16px;line-height:1;}
+    .xy-bottom-nav a .ic{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;line-height:1;}
+    .xy-bottom-nav a .ic svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
     .xy-bottom-nav a:hover,.xy-bottom-nav a:focus{color:#FAFAFA;background:rgba(255,255,255,.07);}
     .xy-bottom-nav select{appearance:none;-webkit-appearance:none;background:rgba(255,255,255,.07);color:#FAFAFA;border:1px solid rgba(255,255,255,.12);border-radius:999px;padding:8px 12px;font-size:11.5px;font-weight:700;outline:none;max-width:104px;text-overflow:ellipsis;}
     .xy-install-btn{position:fixed;right:14px;bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:120;border:1px solid rgba(255,255,255,.14);background:#FAFAFA;color:#08080A;border-radius:999px;padding:11px 18px;font-size:12.5px;font-weight:800;cursor:pointer;box-shadow:0 10px 28px rgba(0,0,0,.5);}
     @media (min-width:900px){.xy-bottom-nav{bottom:20px;}}
   </style>
   <nav class="xy-bottom-nav" aria-label="Navigasi cepat">
-    <a href="#top-anchor" onclick="window.scrollTo({top:0,behavior:'smooth'});return false;"><span class="ic">🏠</span>Beranda</a>
-    <a href="#jelajahi"><span class="ic">✨</span>Fitur</a>
-    <a href="rdp.html"><span class="ic">🖥️</span>RDP Web</a>
-    <a href="#download"><span class="ic">⬇️</span>Unduh</a>
-    <a href="status.html"><span class="ic">📡</span>Status</a>
+    <a href="#top-anchor" onclick="window.scrollTo({top:0,behavior:'smooth'});return false;"><span class="ic"><svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/></svg></span>Beranda</a>
+    <a href="#jelajahi"><span class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span>Fitur</a>
+    <a href="rdp.html"><span class="ic"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></span>RDP Web</a>
+    <a href="#download"><span class="ic"><svg viewBox="0 0 24 24"><path d="M12 4v11m0 0-4-4m4 4 4-4"/><path d="M4 19h16"/></svg></span>Unduh</a>
+    <a href="status.html"><span class="ic"><svg viewBox="0 0 24 24"><path d="M4 12h3l2.5-6 5 12 2.5-6H20"/></svg></span>Status</a>
     <select id="xyLangSelect" aria-label="Bahasa / Language"></select>
   </nav>
   <button class="xy-install-btn" id="xyInstallBtn" hidden>📲 Install App</button>
@@ -2093,7 +2127,12 @@
       // Slider screenshot aplikasi. Tambahkan entri baru di sini setelah
       // screenshot UI terbaru tersedia, contoh:
       // { src: "screenshots/menu-grid.png", caption: "Menu sesi grid" }
-      var XY_SCREENSHOTS = [];
+      var XY_SCREENSHOTS = [
+        { src: "screenshots/11_APK_UI_State1_HUD_Dan_Rail_Terpisah.png", caption: "UI Sesi State 1 — HUD & Rail Terpisah di Android" },
+        { src: "screenshots/12_APK_UI_State2_BubblePanahKeyboard_AksiCepat.png", caption: "UI Sesi State 2 — Bubble Kontrol, Panah, Keyboard & Aksi Cepat" },
+        { src: "screenshots/13_APK_UI_State3_MenuPopup_PanelUtama_Lively60Hz.png", caption: "UI Sesi State 3 — Menu Popup, Transfer File & Panel Utama 60Hz" },
+        { src: "screenshots/01_Desktop_Icons_And_Shortcuts_Audit.png", caption: "Desktop Windows RDP — Shortcut & Utilitas Terverifikasi" }
+      ];
       (function initShotSlider() {
         var track = document.getElementById("shot-track");
         var slider = document.getElementById("shot-slider");

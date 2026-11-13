@@ -1535,8 +1535,8 @@ fun AddDeviceScreen(
                         )
                         Text(
                             xy(
-                                "Jika RDP Windows beli sendiri belum mendeteksi mic di game/Discord, jalankan perintah 1-klik atau file .BAT ini di dalam RDP:",
-                                "If your purchased Windows RDP doesn't detect the mic in games/Discord yet, run this 1-click command or .BAT file inside the RDP:",
+                                "Jika RDP Windows beli sendiri belum mendeteksi mic di aplikasi desktop/rapat, jalankan perintah 1-klik atau file .BAT ini di dalam RDP:",
+                                "If your purchased Windows RDP doesn't detect the mic in desktop/meeting apps yet, run this 1-click command or .BAT file inside the RDP:",
                             ),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,

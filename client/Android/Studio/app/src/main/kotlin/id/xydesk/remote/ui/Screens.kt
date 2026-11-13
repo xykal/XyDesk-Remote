@@ -1063,7 +1063,23 @@ private fun AboutSection() {
                 subtitle = XyRuntimeCatalog.SHIELD_VERSION,
             )
             XyRow(
-                title = t("about.developer"),
+                title = "Founder",
+                subtitle = "xykal (Haekal Saputra)",
+            )
+            XyRow(
+                title = xy("Tim & Organisasi", "Team & Organization"),
+                subtitle = "XyVerse · XyVerse Technology Global",
+            )
+            XyRow(
+                title = xy("Lokasi Pengembangan", "Developed in"),
+                subtitle = "Indonesia",
+            )
+            XyRow(
+                title = xy("Fokus Aplikasi", "Product Focus"),
+                subtitle = xy(
+                    "Klien Remote Desktop (RDP) murni — streaming 60–120 FPS, audio 2-arah, transfer file XyDesk:\\Download, & kontrol sentuh lengkap",
+                    "Pure Remote Desktop (RDP) client — 60–120 FPS streaming, two-way audio, XyDesk:\\Download file transfer, & full touch controls",
+                ),
             )
         }
 
