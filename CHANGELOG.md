@@ -3,6 +3,10 @@
 Semua perubahan sejak rilis publik v1.0.2 sampai v1.1.8.
 Format: versi (kode) — tanggal — poin perubahan.
 
+## Belum terbit
+- XyShield Anti-Crack: pemindaian stack-trace berbasis substring ("luckypatcher"/"pmshook"/"apksignaturekiller") dihapus — nama kelas kebetulan pernah memicu peringatan "DETEKSI MODIFIKASI / CRACK" pada build resmi. Deteksi kelas hook pasti (MT SignatureKiller, LuckyPatcher, Xposed, Substrate) tetap aktif.
+- Gerbang keamanan kini menampilkan **Versi Terpasang** (nama + kode versi) pada baris audit dan ringkasan "Salin Audit" — pengguna build lama langsung tahu harus update ke versi resmi terbaru.
+
 ## v1.1.12
 - Sinkron Cloud: setelan & kontrol kustom dicadangkan ke akun GitHub lo (kata sandi/token TIDAK pernah ikut) — habis pasang ulang tinggal pakai kode pemulihan lalu "Pulihkan dari Cloud".
 - Drawer kontrol sesi kini meluncur masuk dari tepi kanan (bukan muncul mendadak).

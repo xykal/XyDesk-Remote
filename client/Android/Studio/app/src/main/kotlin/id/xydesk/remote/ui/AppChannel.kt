@@ -158,6 +158,7 @@ internal object AppChannel {
         val officialFingerprintShort: String,
         val installerName: String,
         val detectedHookName: String?,
+        val appVersion: String,
     ) {
         val isCleanOfficial: Boolean
             get() = signatureVerified && packageVerified && hookFree
@@ -196,6 +197,11 @@ internal object AppChannel {
                 pm.getInstallerPackageName(context.packageName)
             }
         }.getOrNull()?.takeIf { it.isNotBlank() } ?: "sideload/apk"
+        @Suppress("DEPRECATION")
+        val appVersion = runCatching {
+            val info = context.packageManager.getPackageInfo(context.packageName, 0)
+            "${info.versionName} (${info.versionCode})"
+        }.getOrNull() ?: "tidak-terbaca"
         return SecurityAuditReport(
             signatureVerified = sigOk,
             packageVerified = pkgOk,
@@ -204,6 +210,7 @@ internal object AppChannel {
             officialFingerprintShort = MARK_HEAD,
             installerName = installer,
             detectedHookName = hookName,
+            appVersion = appVersion,
         )
     }
 
@@ -219,13 +226,10 @@ internal object AppChannel {
             val found = runCatching { Class.forName(cls, false, AppChannel::class.java.classLoader) }.isSuccess
             if (found) return@runCatching label
         }
-        val trace = Throwable().stackTrace
-        for (frame in trace) {
-            val cn = frame.className.lowercase()
-            if (cn.contains("apksignaturekiller") || cn.contains("pmshook") || cn.contains("luckypatcher")) {
-                return@runCatching frame.className.substringAfterLast('.')
-            }
-        }
+        // Pemindaian stack-trace berbasis substring dihapus: nama kelas yang
+        // kebetulan mengandung "luckypatcher"/"pmshook"/"apksignaturekiller"
+        // memicu false positive pada build resmi. Deteksi kelas pasti di atas
+        // sudah memadai — hook framework selalu menyuntikkan kelasnya sendiri.
         null
     }.getOrNull()
 
@@ -287,7 +291,7 @@ internal fun AppChannelGate(
     if (!blocked || dismissed) return
 
     val diagSummary = remember(report) {
-        "XyShield Audit | sig=${report.actualFingerprintShort} (expected=${report.officialFingerprintShort}) | pkg=${context.packageName} | hook=${report.detectedHookName ?: "clean"} | installer=${report.installerName}"
+        "XyShield Audit | ver=${report.appVersion} | sig=${report.actualFingerprintShort} (expected=${report.officialFingerprintShort}) | pkg=${context.packageName} | hook=${report.detectedHookName ?: "clean"} | installer=${report.installerName}"
     }
 
     Box(
@@ -394,6 +398,11 @@ internal fun AppChannelGate(
                     label = xy("Modul Native XyCore", "XyCore Native .so"),
                     value = "libxydesk-crypto-shield.so v4.1",
                     ok = report.packageVerified,
+                )
+                SecurityAuditRow(
+                    label = xy("Versi Terpasang", "Installed Version"),
+                    value = report.appVersion,
+                    ok = true,
                 )
                 SecurityAuditRow(
                     label = xy("Sumber Installer", "Installer Source"),
