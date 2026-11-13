@@ -236,7 +236,9 @@ fun XyDeskTheme(
                 LocalUiMotionEnabled provides uiMotionEnabled,
                 LocalDecorativeMotionEnabled provides uiMotionEnabled,
             ) {
-                content()
+                XyScaledDensity {
+                    content()
+                }
             }
         },
     )
