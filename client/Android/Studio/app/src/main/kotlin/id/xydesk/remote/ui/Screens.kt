@@ -133,6 +133,35 @@ private fun DisplaySection(
             onSelect = { index = it },
             modifier = Modifier.fillMaxWidth(),
         )
+        // Skala UI global: mencegah UI kegedean di layar HP kecil.
+        XyCard {
+            XySectionLabel(xy("Skala UI", "UI scale"))
+            Spacer(Modifier.height(8.dp))
+            var uiScale by remember { mutableIntStateOf(XyUiScaleState.current(appPrefs)) }
+            XySegmented(
+                options = listOf(
+                    xy("Otomatis", "Auto"),
+                    xy("Kecil", "Small"),
+                    xy("Sedang", "Medium"),
+                    xy("Besar", "Large"),
+                ),
+                selectedIndex = uiScale.coerceIn(0, 3),
+                onSelect = { i ->
+                    uiScale = i
+                    XyUiScaleState.set(i, appPrefs)
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                xy(
+                    "Otomatis menyesuaikan ukuran UI dengan layar HP lo sehingga tidak kegedean di layar kecil. Kecil/Sedang/Besar memaksa skala tertentu.",
+                    "Auto adapts UI size to your screen so it never feels oversized on small screens. Small/Medium/Large force a fixed scale.",
+                ),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         // Gaya menu utama — dipakai tombol Menu di pojok kanan atas.
         XyCard {
             XySectionLabel(xy("Gaya menu utama", "Main menu style"))

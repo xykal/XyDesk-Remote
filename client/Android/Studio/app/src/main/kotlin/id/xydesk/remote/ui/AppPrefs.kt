@@ -40,6 +40,11 @@ class AppPrefs(context: Context) {
         get() = sp.getInt("home_menu_style", HOME_MENU_POPUP)
         set(v) = sp.edit().putInt("home_menu_style", v).apply()
 
+    /** Skala UI global: 0 = Otomatis (adaptif layar), 1 = Kecil, 2 = Sedang, 3 = Besar. */
+    var uiScaleMode: Int
+        get() = sp.getInt("ui_scale_mode", 0)
+        set(v) = sp.edit().putInt("ui_scale_mode", v).apply()
+
     var keepAlive: Boolean
         get() = sp.getBoolean(KEY_KEEP_ALIVE, true)
         set(v) = sp.edit().putBoolean(KEY_KEEP_ALIVE, v).apply()
@@ -222,5 +227,24 @@ object XyMenuStyleState {
     fun set(style: Int, prefs: AppPrefs) {
         prefs.homeMenuStyle = style
         cached = style
+    }
+}
+
+/**
+ * Mode Skala UI global yang bisa dibaca langsung dari composition (pola sama
+ * dengan XyMenuStyleState): perubahan dari seksi Tampilan langsung terasa tanpa
+ * restart. 0 = Otomatis, 1 = Kecil, 2 = Sedang, 3 = Besar.
+ */
+object XyUiScaleState {
+    private var cached by androidx.compose.runtime.mutableIntStateOf(-1)
+
+    fun current(prefs: AppPrefs): Int {
+        if (cached < 0) cached = prefs.uiScaleMode
+        return cached
+    }
+
+    fun set(mode: Int, prefs: AppPrefs) {
+        prefs.uiScaleMode = mode
+        cached = mode
     }
 }

@@ -25,6 +25,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.width
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.zIndex
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -1151,7 +1152,7 @@ private fun BoxScope.XyHomeMenuShell(
         } else {
             Column(
                 Modifier
-                    .width(312.dp)
+                    .width(minOf(312.dp, LocalConfiguration.current.screenWidthDp.dp * 0.85f))
                     .fillMaxHeight()
                     .clip(RoundedCornerShape(topStart = 24.dp, bottomStart = 24.dp))
                     .background(MaterialTheme.colorScheme.surface)
