@@ -4,6 +4,8 @@ Semua perubahan sejak rilis publik v1.0.2 sampai v1.1.8.
 Format: versi (kode) — tanggal — poin perubahan.
 
 ## Belum terbit
+- **Gateway RDP web (Rust)** — `gateway/`: token sesi terenkripsi (AES-256-CBC + HMAC-SHA256, TTL 120 dtk) + jembatan WebSocket ↔ guacd untuk RDP dari browser; 8/8 tes cargo lulus. Deploy butuh VPS (lihat `gateway/README.md`).
+- **Perlindungan anti-clone** — `NOTICE` (kebijakan merek + deteksi klon XyShield + checksum publik) dan seksi README; sumber tetap publik, klon/repack ditindak.
 - Web global: **20 bahasa** (+ auto-translate 100+ bahasa via /api/ui/translate, hasil di-cache) lewat pemilih bahasa di bottom nav; hreflang + sitemap alternates untuk SEO sedunia.
 - **PWA**: manifest + service worker + tombol Install — bisa dipasang di Android, desktop, dan **iOS** (Safari → Add to Home Screen).
 - **Bottom nav melayang full rounded** (glass, safe-area aware) di semua halaman web.
