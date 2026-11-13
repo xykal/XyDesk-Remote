@@ -141,7 +141,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
     var fpsBoost by remember { mutableStateOf(prefs.getString("fps_boost", "ya") != "tidak") }
     var win10Theme by remember { mutableStateOf(prefs.getString("win10", "ya") != "tidak") }
     var ekstraDesktop by remember { mutableStateOf(prefs.getString("ekstra", "ya") != "tidak") }
-    var discordReady by remember { mutableStateOf(prefs.getString("discord", "tidak") == "ya") }
+    var devTools by remember { mutableStateOf(prefs.getString("devtools", "tidak") == "ya") }
 
     // Secret configuration & password vault lokal
     var password by remember {
@@ -218,7 +218,7 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
             .putString("fps_boost", if (fpsBoost) "ya" else "tidak")
             .putString("win10", if (win10Theme) "ya" else "tidak")
             .putString("ekstra", if (ekstraDesktop) "ya" else "tidak")
-            .putString("discord", if (discordReady) "ya" else "tidak")
+            .putString("devtools", if (devTools) "ya" else "tidak")
             .putBoolean("remember_rdp_pass", rememberPasswordLocal)
             .apply()
         if (rememberPasswordLocal && password.isNotBlank()) {
@@ -342,9 +342,11 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
         put("win10", if (win10Theme) "ya" else "tidak")
         put("xydesk", if (xydeskBoost) "ya" else "tidak")
         put("ekstra", if (ekstraDesktop) "ya" else "tidak")
+        // Dev tools dikirim hanya saat aktif: workflow repo lama tidak mengenal
+        // input ini (dispatch ditolak 422), jadi default diam tidak mengganggu.
+        if (devTools) put("devtools", "ya")
         put("grafis", grafis)
         put("microphone", if (microphone) "ya" else "tidak")
-        put("discord", if (discordReady) "ya" else "tidak")
         put("perpanjang_otomatis", if (autoRenew) "ya" else "tidak")
         // workflow hanya punya portmap_host/portmap_port — nama
         // railway_host/railway_port dulu tidak pernah dikenal GitHub (422).
@@ -1976,11 +1978,11 @@ fun RdpFreeScreen(onBack: () -> Unit, onConnect: (ConnectionProfile) -> Unit) {
                                         onCheckedChange = { ekstraDesktop = it; saveSettings() },
                                     )
                                     RdpFlatToggleRow(
-                                        title = "Discord",
-                                        subtitle = "Pasang Discord desktop di sesi RDP (siap login)",
-                                        checked = discordReady,
+                                        title = "Toolchain Developer (C/C++, C#, Rust)",
+                                        subtitle = "LLVM/Clang, .NET SDK 8, Rust + VS Code di sesi RDP (butuh repo workflow terbaru)",
+                                        checked = devTools,
                                         enabled = !busy,
-                                        onCheckedChange = { discordReady = it; saveSettings() },
+                                        onCheckedChange = { devTools = it; saveSettings() },
                                     )
                                     RdpFlatToggleRow(
                                         title = "Tema Visual Windows 10 & Wallpaper XyVerse",

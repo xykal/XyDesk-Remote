@@ -1566,3 +1566,13 @@ Tiga permintaan pemilik ditangani tuntas:
 - `gateway/` (baru, Rust/axum/tokio): `POST /api/rdp/token` (token AES-256-CBC + HMAC-SHA256, TTL 120 dtk, verifikasi HMAC sebelum dekripsi), `GET /websocket-tunnel` (validasi token → TCP guacd → jabat tangan `select/args/size/audio/video/connect` → pipa dua arah WS↔guacd), `/healthz`. **cargo test 8/8 lulus** (roundtrip, tamper, secret beda, kedaluwarsa, token sampah, format instruksi, handshake, panjang argumen). Deploy = VPS + guacd + TLS (keputusan pemilik) — `gateway/README.md`.
 - `web/rdp.html`: URL token kini diturunkan dari host gateway input (bukan origin web).
 - `NOTICE` (baru): kebijakan anti-clone berlapis — merek dagang dilindungi, build resmi terpinned SignerMark, XyShield mendeteksi klon/re-sign, checksum publik, jalur pelaporan. README mendapat seksi Anti-Clone. Sumber tetap publik (Apache-2.0 untuk kode; merek tidak).
+
+
+## 2026-11-13 — Tugas #42: bersih-bersih game, transfer Download, gamepad sentuh, dev tools, online anonim
+- RdpFreeScreen: state/save/dispatch/row/preset untuk game (sampDeps, sampAntiBan, mumuPlayer, robloxReady, mcJavaReady, mcBedrockReady) dihapus total; handler "samp_antiban" & pesan konfirmasinya ikut dibuang; blok UI "GAME & EMULATOR" dilepas. Sisa opsi tetap dikelompokkan sesuai urutan workflow (Preset → Spesifikasi → Performa → Aplikasi & Tampilan → Sesi & Audio).
+- Tombol utama: "Mulai (Xm)" → "Buat RDP (Xm)"; saat `isRunningOrQueued` → "Lihat Status RDP" (onClick = `activeTab = 0`), tombol tetap ter-tekan (enabled).
+- XyDeskSession: gate `shareActiveSessionStats` dihapus — heartbeat user online anonim selalu jalan tanpa opt-in.
+- SessionFileTransfer.sendToPc: target kini `<shareRoot>/Download/` (mkdirs + uniqueName per folder itu); hapus-gagal juga di folder yang sama.
+- TouchGamepadOverlay.kt (baru): overlay kontrol PS-style (L2/L1, R2/R1, D-pad, △○✕□, stick WASD + stick panah, Start/Select, slider opasitas, tombol "🎮 Kontrol" untuk buka/tutup). KeyEvent disuntik lewat `SessionSurfaceController.onKeyEvent` (jalur keyboard HP yang sudah terbukti). Dipasang di root Box XyDeskSession dengan guard `connected && !mappingMode && !controlsOverlayOpen && !privacyCurtain`.
+- RdpFreeScreen: toggle "Toolchain Developer (C/C++, C#, Rust)" baru (input `devtools` dikirim hanya saat aktif — repo workflow lama tidak 422). Toggle "Discord" dihapus (fitur non-RDP).
+- Verifikasi: tidak ada compile lokal (gradlew tidak jalan di sandbox) — mengandalkan CI Kotlin syntax guard + Build APK.

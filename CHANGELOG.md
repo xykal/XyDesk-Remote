@@ -4,6 +4,12 @@ Semua perubahan sejak rilis publik v1.0.2 sampai v1.1.8.
 Format: versi (kode) — tanggal — poin perubahan.
 
 ## Belum terbit
+- **Tugas #42 (UI & sesi)**: tombol utama kini "Buat RDP (Xm)" dan otomatis jadi **"Lihat Status RDP"** saat sesi online (ketuk = lompat ke tab status). Seksi "Game & Emulator" + toggle GTA/SA-MP, anti-ban, Roblox, Minecraft, MuMu dihapus dari layar Buat RDP; preset dirapikan ("Preset Lengkap").
+- **User online anonim tanpa opt-in** — statistik sesi (UUID acak/sesi, heartbeat) kini selalu aktif; tidak ada nama/host/kunci yang dikirim.
+- **Transfer**: impor file dari HP sekarang masuk ke subfolder **Download** pada folder bersama (di PC: `XyDesk:\Download\`); panel transfer tetap bisa membaca folder itu dan menyimpan file PC ke Unduhan HP.
+- **Kontrol gamepad sentuh ala AetherSX2** (baru, `ui/TouchGamepadOverlay.kt`): stick kiri (WASD) + stick kanan (panah) + D-pad + face buttons (△○✕□) + L1/L2/R1/R2 + Start/Select, slider opasitas — disuntik sebagai KeyEvent ke sesi RDP.
+- **Opsi Toolchain Developer** (C/C++ LLVM, .NET SDK 8/C#, Rust, VS Code) di layar Buat RDP — dikirim hanya saat aktif (kompatibel repo workflow lama).
+- Fitur non-RDP **Discord dihapus** dari layar & workflow (arahan: hapus yang tidak berhubungan dengan koneksi RDP).
 - **Gateway RDP web (Rust)** — `gateway/`: token sesi terenkripsi (AES-256-CBC + HMAC-SHA256, TTL 120 dtk) + jembatan WebSocket ↔ guacd untuk RDP dari browser; 8/8 tes cargo lulus. Deploy butuh VPS (lihat `gateway/README.md`).
 - **Perlindungan anti-clone** — `NOTICE` (kebijakan merek + deteksi klon XyShield + checksum publik) dan seksi README; sumber tetap publik, klon/repack ditindak.
 - Web global: **20 bahasa** (+ auto-translate 100+ bahasa via /api/ui/translate, hasil di-cache) lewat pemilih bahasa di bottom nav; hreflang + sitemap alternates untuk SEO sedunia.

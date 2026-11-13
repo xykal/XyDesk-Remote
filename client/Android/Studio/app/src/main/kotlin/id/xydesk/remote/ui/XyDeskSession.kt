@@ -1375,6 +1375,12 @@ fun XyDeskSessionScreen(
 ,
         )
 
+        // Kontrol gamepad sentuh ala AetherSX2 (stick ganda + tombol PS),
+        // permintaan pemilik 13 Nov 2026 — hanya tampil saat sesi terhubung.
+        TouchGamepadOverlay(
+            controller = controller,
+            enabled = connected && !mappingMode && !controlsOverlayOpen && !privacyCurtain,
+        )
 
         // Lapisan gesture trackpad: menutup surface supaya sentuhan tidak
         // diteruskan langsung sebagai klik di posisi jari.
