@@ -192,7 +192,9 @@
       say("Menyiapkan token terenkripsi…", "");
       // Token dibuat gateway dari kredensial (HMAC + AES). Endpoint ini disediakan
       // gateway; kalau belum aktif, pesan error yang ramah ditampilkan.
-      fetch("/api/rdp/token", {
+      var tokenUrl = gateway.replace(/^wss:/i, "https:").replace(/^ws:/i, "http:")
+        .replace(/\/websocket-tunnel.*$/i, "") + "/api/rdp/token";
+      fetch(tokenUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ host: host, port: Number(port), user: user, pass: pass, width: Number(res[0]), height: Number(res[1]) })

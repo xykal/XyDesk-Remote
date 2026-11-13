@@ -135,3 +135,12 @@ Dibuat oleh xykal — XyVerse Technology Global.
 ### RdpFree media profile
 
 RdpFree connections use standard RDP speaker playback and an explicit microphone opt-in; Android runtime microphone permission is still required. Desktop wallpaper is enabled for this profile. The optional UDP audio bridge is disabled on RdpFree profiles, and disabled bridges no longer start a second microphone capture. Other connection profiles retain their own options. The host must allow RDP audio capture and wallpaper. Configuration tests do not replace Windows/Android recording or game compatibility tests.
+
+
+## 🛡️ Perlindungan Anti-Clone (sumber tetap publik)
+
+Kode publik untuk transparansi — tapi **klon/repack tidak dilindungi merek**:
+- Build resmi ditandatangani sertifikat terpinned (`SignerMark`); klon/re-sign **kedeteksi XyShield** dan pengguna diperingatkan.
+- Setiap rilis memuat `SHA256SUMS.txt` + `SIGNATURE-VERIFICATION.txt` untuk verifikasi independen.
+- Merek "XyDesk" dilindungi — lihat [`NOTICE`](NOTICE) untuk kebijakan lengkap + cara melapor klon.
+- Gateway RDP web ditulis dalam **Rust** (`gateway/`) dengan token HMAC+AES — lihat [`gateway/README.md`](gateway/README.md).

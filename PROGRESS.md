@@ -1561,3 +1561,8 @@ Tiga permintaan pemilik ditangani tuntas:
 - `web/rdp.html` (baru): klien RDP dari browser (guacamole-common-js CDN) — form koneksi (host/port/user/pass/resolusi/gateway), menu kontrol sesi ala APK (keyboard, mode mouse, fit, fullscreen, clipboard, putus). Token via `/api/rdp/token` (gateway). PWA-friendly.
 - `web/sitemap.xml`: semua halaman + xhtml:link alternates + priority/changefreq. `cloudflare/worker.mjs`: `withSecurityHeaders` (CSP, HSTS, nosniff, X-Frame-Options, Referrer-Policy, Permissions-Policy) untuk semua respons statis — **49/49 tes worker lulus** (2 tes sempat gagal karena lupa await, diperbaiki).
 - Catatan: gateway RDP backend (guacd bridge) = PR lanjutan berbasis Rust; deploy butuh VPS (keputusan pemilik).
+
+## 2026-11-13 — Gateway RDP Rust + anti-clone repo (sumber tetap publik)
+- `gateway/` (baru, Rust/axum/tokio): `POST /api/rdp/token` (token AES-256-CBC + HMAC-SHA256, TTL 120 dtk, verifikasi HMAC sebelum dekripsi), `GET /websocket-tunnel` (validasi token → TCP guacd → jabat tangan `select/args/size/audio/video/connect` → pipa dua arah WS↔guacd), `/healthz`. **cargo test 8/8 lulus** (roundtrip, tamper, secret beda, kedaluwarsa, token sampah, format instruksi, handshake, panjang argumen). Deploy = VPS + guacd + TLS (keputusan pemilik) — `gateway/README.md`.
+- `web/rdp.html`: URL token kini diturunkan dari host gateway input (bukan origin web).
+- `NOTICE` (baru): kebijakan anti-clone berlapis — merek dagang dilindungi, build resmi terpinned SignerMark, XyShield mendeteksi klon/re-sign, checksum publik, jalur pelaporan. README mendapat seksi Anti-Clone. Sumber tetap publik (Apache-2.0 untuk kode; merek tidak).

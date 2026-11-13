@@ -1,0 +1,35 @@
+# XyDesk Remote — Perlindungan Anti-Clone & Pemberitahuan Hak Cipta
+
+Copyright (c) 2026 XyVerse Technology Global. Seluruh merek dagang
+"XyDesk", "XyDesk Remote", dan "XyVerse" adalah milik XyVerse Technology Global.
+
+## Kebijakan Anti-Clone (sumber publik, proteksi berlapis)
+
+Sumber kode repo ini **publik untuk transparansi & kepercayaan**, tetapi
+penggandaan/penerbitan ulang aplikasi (rebrand, repack, mirror APK) tanpa izin
+tertulis **dilarang** dan melanggar kebijakan berikut:
+
+1. **Merek dagang** — nama, ikon, logo, dan tampilan XyDesk Remote tidak boleh
+   dipakai pada turunan/klon mana pun tanpa lisensi tertulis.
+2. **Build resmi hanya dari kanal resmi** — GitHub Releases repo ini dan
+   www.xydeskremote.biz.id. Setiap APK resmi ditandatangani dengan sertifikat
+   terpinned (`SignerMark`, SHA-256 `8429f689e7…`).
+3. **Deteksi klon aktif (XyShield)** — aplikasi memverifikasi sidik tangan
+   sertifikat dan mendeteksi injeksi/modifikasi (signature killer, repack,
+   hook framework). APK hasil klon/re-sign akan ditandai sebagai tidak resmi
+   dan pengguna diperingatkan untuk mengunduh versi resmi.
+4. **Checksum publik** — setiap rilis memuat `SHA256SUMS.txt` +
+   `SIGNATURE-VERIFICATION.txt` untuk verifikasi independen.
+5. **Lisensi kode** — kode berlisensi Apache-2.0 (lihat `LICENSE`); lisensi itu
+   mengatur penggunaan KODE, bukan merek, nama produk, atau distribusi APK
+   bermerek XyDesk. Menerbitkan ulang APK/aset bermerek = pelanggaran merek.
+
+## Pelaporan
+Menemukan klon/mirror tidak resmi (APKPure pihak ketiga, mirror, rebrand)?
+Laporkan lewat https://report.xydeskremote.biz.id/ atau issue berlabel
+`security` di repo ini. Tindakan DMCA/penghapusan akan dilakukan untuk
+distribusi yang menyesatkan.
+
+## Jaminan
+Aplikasi resmi **gratis**, tanpa iklan paksa, dan tidak pernah meminta kata
+sandi RDP ke server mana pun selain sesi RDP milikmu sendiri.
