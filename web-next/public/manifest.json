@@ -1,0 +1,25 @@
+{
+  "name": "XyDesk Remote — Remote Desktop RDP Android",
+  "short_name": "XyDesk Remote",
+  "description": "Klien RDP Android untuk mengakses PC Windows: unduh APK resmi, cek kompatibilitas, dan sambungkan RDP dari browser (web).",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#08080A",
+  "theme_color": "#08080A",
+  "lang": "id",
+  "dir": "auto",
+  "orientation": "any",
+  "categories": ["productivity", "utilities", "developer"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Unduh APK", "description": "Unduh paket instalasi Android resmi", "url": "/#download" },
+    { "name": "RDP Web", "description": "Sambungkan RDP langsung dari browser", "url": "/rdp.html" },
+    { "name": "Cek APK", "description": "Cek ABI perangkatmu", "url": "/abi.html" }
+  ]
+}

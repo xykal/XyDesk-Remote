@@ -1,0 +1,8 @@
+{
+  "name": "xydesk-migration-router-local",
+  "main": "./router.mjs",
+  "compatibility_date": "2026-10-03",
+  "workers_dev": false,
+  "assets": { "directory": "../web", "binding": "ASSETS", "html_handling": "none", "run_worker_first": true },
+  "services": [{ "binding": "NEXT_SITE", "service": "xydesk-remote-next-staging" }]
+}
