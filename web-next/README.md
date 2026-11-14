@@ -15,3 +15,7 @@ Node.js 22+, `npm ci`, `npm run dev`. Preview is a standalone app: links to APK 
 The legacy pages remain plain HTML (not yet Next/React pages). In the isolated preview `/api/*` is not connected to the production Worker; release stats and other dynamic calls will return 404. The two main APK links intentionally point to the currently public production download aliases, **not** the draft release. The old screenshots are historical and can display legacy games. The next step is integration testing against an isolated Worker with a dedicated service binding and ensuring language/SEO/PWA/feature parity, then a staged cutover; this preview is not production-ready.
 
 The repository-level `integration/` directory now contains a local two-Worker router, which keeps legacy API/download routes working while routing the selected UI paths to OpenNext. See `integration/README.md`. It is still not production configuration.
+
+## Language and offline status
+
+The Next homepage offers Indonesian and English plus 18 API-translated languages. Translation requests contain only fixed interface strings; unavailable translations fall back to English with a notice. Browser storage is used for selection and completed translation batches. The preview-only service worker caches the homepage shell and static assets; API, RDP, authentication and APK downloads stay network-only. It is deliberately not registered on production domains until rollback and PWA parity are approved. Existing pages remain legacy HTML.

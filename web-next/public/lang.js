@@ -21,7 +21,7 @@
   function cacheWrite(c) {
     try { localStorage.setItem(CACHE_KEY, JSON.stringify(c)); } catch (e) {}
   }
-  function apiCode(l) { return (l === "zh" ? "zh-CN" : l).toUpperCase(); }
+  function apiCode(l) { return l === "zh" ? "zh-CN" : l; }
 
   function capture() {
     if (orig) return;

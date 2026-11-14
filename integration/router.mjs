@@ -3,9 +3,9 @@ import legacy from '../cloudflare/worker.mjs';
 // Migration router: API/download aliases and unknown paths remain owned by the
 // existing Worker. Only explicitly enumerated UI routes go to Next. This file
 // and its wrangler config are for isolated local/staging use, not production.
-const pages = new Set(['/','/index.html','/about','/about.html','/abi','/abi.html','/host','/host.html','/rdp','/rdp.html','/status','/status.html','/privacy','/privacy.html','/terms','/terms.html','/licenses','/licenses.html']);
+const pages = new Set(['/','/index.html','/about','/about.html','/abi','/abi.html','/rdp','/rdp.html','/status','/status.html','/privacy','/privacy.html','/terms','/terms.html','/licenses','/licenses.html']);
 export function isNextPath(path) {
-  return pages.has(path) || path.startsWith('/_next/') || path.startsWith('/screenshots/') || path === '/legacy-nav.css' || path === '/legacy-nav.js';
+  return pages.has(path) || path.startsWith('/_next/') || path.startsWith('/screenshots/') || path === '/legacy-nav.css' || path === '/legacy-nav.js' || path === '/sw-next.js' || path === '/lang.js';
 }
 export function isWebHost(host) {
   return host === 'localhost' || host === '127.0.0.1' || host.endsWith('.e2b.app') || host === 'www.xydeskremote.biz.id';
